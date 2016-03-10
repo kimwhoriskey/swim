@@ -1,0 +1,12 @@
+# Export 
+exportPattern(".")
+
+# Import 
+import(
+TMB, 
+mvtnorm, 
+rgdal, 
+sp
+)
+
+useDynLib(swim)
