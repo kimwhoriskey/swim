@@ -8,8 +8,8 @@ plotSwim = function(object){
   data(shpfiles)
   #world <- readOGR(dsn = ".", layer = "ne_10m_land")
   
-  xlims = c(min(test$regData$lon)-2, max(test$regData$lon)+2) #longitude
-  ylims = c(min(test$regData$lat)-2, max(test$regData$lat)+2) #latitude
+  xlims = c(min(object$regData$lon)-2, max(object$regData$lon)+2) #longitude
+  ylims = c(min(object$regData$lat)-2, max(object$regData$lat)+2) #latitude
 
   
   locs = data.frame(object$regData$lon, object$regData$lat)

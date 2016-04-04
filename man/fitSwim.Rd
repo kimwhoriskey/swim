@@ -7,7 +7,7 @@
 \usage{fitSwim(data, ts)}
 
 \arguments{
-\item{data}{A data.frame with three columns specifically named. The column "date" should include the date-time step of the animal track (in POISIX?). The columns "lon" and "lat" denote the longitude and latitude, respectively.}
+\item{data}{A data.frame with three columns specifically named. The column "date" should include the date-time step of the animal track as a POSIX class. The columns "lon" and "lat" denote the longitude and latitude, respectively.}
 \item{ts}{The time step for interpolating the data, in hours. Fractions of hours are also possible.}
 \item{model_type}{The swim model to be fit. Currently the only available option is the SHMMM, the Switching Hidden Markov Movement Model.}
 }

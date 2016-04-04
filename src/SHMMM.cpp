@@ -8,7 +8,7 @@ Type objective_function<Type>::operator() ()
 {
   // Input data
   DATA_MATRIX(x); //track coordinates
-  DATA_IVECTOR(b);  //set of possible states
+  //DATA_IVECTOR(b);  //set of possible states
   DATA_FACTOR(stateSpace);  //values in state-space
   DATA_VECTOR(initDist);  //specify initial probability
   
@@ -17,13 +17,16 @@ Type objective_function<Type>::operator() ()
   PARAMETER(logitTheta2); //second turning angle, add to the first and attempt to make it larger
   PARAMETER(logitGamma1); // First autocorrelation - logit because 0 < gamma < 1
   PARAMETER(logitGamma2); // First autocorrelation - logit because 0 < gamma < 1
-  PARAMETER(logSdlat); // Process standard deviation in lat - log because sdlat > 0
   PARAMETER(logSdlon); // Process standard deviation in lon - log because sdlon > 0
+  PARAMETER(logSdlat); // Process standard deviation in lat - log because sdlat > 0
+
+  //PARAMETER(logitRho); // Correlation coefficient for process variance - logit because -1 < rho < 1
   
   PARAMETER_MATRIX(logA); //matrix of switching probabilities
   
   // Transformation of the input parameters to model format
- 
+  //Type theta2 = theta1 + exp(logTheta2);
+  // Type theta2 = M_PI/(1.0+exp(-logTheta2)) + M_PI/2.0;
   Type theta1 = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; //between -pi and pi
   Type theta2 = 2*M_PI/(1.0+exp(-logitTheta2)); //between 0 and 2*pi
   vector<Type> theta(2);
@@ -35,33 +38,26 @@ Type objective_function<Type>::operator() ()
   vector<Type> gamma(2);
   gamma(0) = gamma1;
   gamma(1) = gamma2;
-  Type sdLat = exp(logSdlat);
   Type sdLon = exp(logSdlon);
+  Type sdLat = exp(logSdlat);
+  //Type rho = 2.0/(1.0+exp(-logitRho))-1.0;
   
   // Report the parameters and their standard errors in their model format
   REPORT(theta1);
   REPORT(theta2);
   REPORT(gamma1);
   REPORT(gamma2);
-  REPORT(sdLat);
   REPORT(sdLon);
+  REPORT(sdLat);
+  //REPORT(rho);
   ADREPORT(theta1);
   ADREPORT(theta2);
   ADREPORT(gamma1);
   ADREPORT(gamma2);
-  ADREPORT(sdLat);
   ADREPORT(sdLon);
+  ADREPORT(sdLat);
   //ADREPORT(rho);
 
-
-  //setting up the matrix of switching probabilities
-//   matrix<Type> A(logA.rows(),logA.cols()+1); /*adding one more column to A than was 
-//   present in logA */
-  
-//   A(0,0) = (1.0/2.0)*(1.0/(1.0+exp(-logA(0,0)))) + (1.0/2.0);
-//   A(0,1) = 1.0 - A(0,0);
-//   A(1,0) = (1.0/2.0)*(1.0/(1.0+exp(-logA(1,0))));
-//   A(1,1) = 1.0 - A(1,0);
 
  //setting up the matrix of switching probabilities
  matrix<Type> A(logA.rows(),logA.cols()+1); /*adding one more column to A than was 
@@ -85,14 +81,14 @@ Type objective_function<Type>::operator() ()
 
 
   // Variance-covariance matrix for the process equation.
-  matrix<Type> covp(2,2);
-  covp << sdLon*sdLon, 0.0,
+  matrix<Type> Sigma(2,2);
+  Sigma << sdLon*sdLon, 0.0,
     0.0, sdLat*sdLat;
 
   /*Setting up the likelihood variable for the process equation. nll_dens will return the 
   negative log-likelihood value for the multivariate normal distribution with covariance
-  matrix covp. */
-  MVNORM_t<Type> nll_dens(covp);
+  matrix Sigma. */
+  MVNORM_t<Type> nll_dens(Sigma);
 
 
   //Forward the Viterbi algorithm to calculate logLikelihood'
@@ -122,9 +118,9 @@ Type objective_function<Type>::operator() ()
     for(int j = 0; j < stateSpace.size(); ++j){
       
       //process equation
-      T << cos(theta(b(j))), -sin(theta(b(j))),
-           sin(theta(b(j))), cos(theta(b(j)));
-      TMP = (x.col(i)-x.col(i-1)) - T*(x.col(i-1) - x.col(i-2))*Type(gamma(b(j)));
+      T << cos(theta(j)), -sin(theta(j)),
+           sin(theta(j)), cos(theta(j));
+      TMP = (x.col(i)-x.col(i-1)) - T*(x.col(i-1) - x.col(i-2))*Type(gamma(j));
       
       phi(j) *= exp(-nll_dens(TMP));
     }
@@ -148,25 +144,27 @@ Type objective_function<Type>::operator() ()
   vector<int> states(x.cols()); //n, 
   /*This is where we will save the estimated states, i.e. bhat. */
 
-  for(int j = 0; j < stateSpace.size(); ++j){
-    v(0,j) = log(initDist(j));
-    /*The first deltas are equal to the initial probabilities of being in 
-    each state because we have no difference data for the first time step. */
-  } 
-   
-//   TMP = x.col(1)-x.col(0);   
 //   for(int j = 0; j < stateSpace.size(); ++j){
-//     v(1,j) = log(initDist(j))-nll_dens(TMP); 
-//     /*The second deltas are equal to multiplying the first delta by the density or likelihood
-//     value of the first differences. Since we are using logs for v, this corresponds to adding
-//     the first v, which are just equal to the log-initial probabilities, to the log-density
-//     of the first differences. Because nll_dens returns the negative log-likelihood, we have
-//     to multiply by -1.*/
-//   }
+//     v(0,j) = log(initDist(j));
+//     /*The first deltas are equal to the initial probabilities of being in 
+//     each state because we have no difference data for the first time step. */
+//   } 
+   
+
   
   matrix<Type> T2(2,2);
   vector<Type> tmp(2);
-
+  
+  tmp = x.col(1)-x.col(0);   
+  for(int j = 0; j < stateSpace.size(); ++j){
+    v(0,j) = log(initDist(j))-nll_dens(tmp); 
+    /*The first deltas are equal to multiplying the first delta by the density or likelihood
+    value of the first differences. Since we are using logs for v, this corresponds to adding
+    the first v, which are just equal to the log-initial probabilities, to the log-density
+    of the first differences. Because nll_dens returns the negative log-likelihood, we have
+    to multiply by -1.*/
+  }
+  
   //Now we calculate the deltas for the rest of the data set
   for(int k = 1; k < (x.cols()-1); ++k){
     
@@ -182,9 +180,9 @@ Type objective_function<Type>::operator() ()
         }
       }
       /*Now we're adding in the information from the observations*/
-      T2 << cos(theta(b(j))), -sin(theta(b(j))),
-            sin(theta(b(j))), cos(theta(b(j)));
-      TMP = (x.col(k+1)-x.col(k)) - T2*(x.col(k) - x.col(k-1))*Type(gamma(b(j)));
+      T2 << cos(theta(j)), -sin(theta(j)),
+            sin(theta(j)), cos(theta(j));
+      TMP = (x.col(k+1)-x.col(k)) - T2*(x.col(k) - x.col(k-1))*Type(gamma(j));
       
       v(k,j) = tmp-nll_dens(TMP);
     }
@@ -203,60 +201,10 @@ Type objective_function<Type>::operator() ()
         ba(x.cols()-1,j) = i;
       }
     }
-    /*Now we're adding in the information from the observations*/
-    
-    v(x.cols()-1,j) = tmp;
-  }
-  
 
-  
-  
-//   
-//   
-//   //Now we calculate the deltas for the rest of the data set
-//   for(int k = 1; k < (x.cols()-1); ++k){
-//     
-//     for(int j = 0; j < stateSpace.size(); ++j){
-//       Type tmp = v(k-1,0) + log(A(j,0));  
-//       
-//       ba(k,j) = 0; //back pointer
-//       
-//       for(int i = 1; i < stateSpace.size(); ++i){
-//         if(v(k-1,i) + log(A(j,i)) > tmp){
-//           tmp = v(k-1,i) + log(A(j,i)); 
-//           ba(k,j) = i;
-//         }
-//       }
-//       /*Now we're adding in the information from the observations*/
-//       T2 << cos(theta(b(j))), -sin(theta(b(j))),
-//             sin(theta(b(j))), cos(theta(b(j)));
-//       TMP = (x.col(k+1)-x.col(k)) - T2*(x.col(k) - x.col(k-1))*Type(gamma(b(j)));
-//       
-//       v(k,j) = v(k-1,ba(k,j))-nll_dens(TMP);
-//     }
-//   }
-//   
-//   
-//   //the last step  
-//   for(int j = 0; j < stateSpace.size(); ++j){
-//     Type tmp = v(x.cols()-2,0) + log(A(j,0));  
-//     
-//     ba(x.cols()-1,j) = 0; //back pointer
-//     
-//     for(int i = 1; i < stateSpace.size(); ++i){
-//       if(v(x.cols()-2,i) + log(A(j,i)) > tmp){
-//         tmp = v(x.cols()-2,i) + log(A(j,i)); 
-//         ba(x.cols()-1,j) = i;
-//       }
-//     }
-//     /*Now we're adding in the information from the observations*/
-//     
-//     v(x.cols()-1,j) = v(x.cols()-2,ba(x.cols()-1,j));
-//   }
-//   
-//   
-//   
-  
+    v(x.cols()-1,j) = tmp; //v(x.cols()-2,ba(x.cols()-1,j));
+  }
+
   
   REPORT(v); //In case we want to look at these to troubleshoot. 
   REPORT(ba);

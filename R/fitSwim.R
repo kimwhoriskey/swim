@@ -33,7 +33,7 @@ fitSwim <- function(data, ts, model_type="SHMMM"){
   space = 0:1
   mu = c(0.5,0.5)
   dats <- list(x = t(iLoc),
-               b=as.integer(space),
+               # b=as.integer(space),
                stateSpace=factor(space),
                initDist=as.double(mu))
   
@@ -41,7 +41,7 @@ fitSwim <- function(data, ts, model_type="SHMMM"){
   #create a list of input parameters. Again, order matters!
   parameters <- list(logitTheta1=0, logitTheta2=0, 
                      logitGamma1=0, logitGamma2=0, 
-                     logSdlat=0, logSdlon=0,
+                     logSdlon=0, logSdlat=0, 
                      logA=matrix(log(1),ncol=1,nrow=2))
   
   
@@ -51,9 +51,11 @@ fitSwim <- function(data, ts, model_type="SHMMM"){
   
   #Now we can pass the objective function and its derivatives into any regular R optimizer. 
   #We are using nlminb. 
-  opt <- nlminb(obj$par,obj$fn,obj$gr)
+  cat("Optimizing the objective function")
+  time = system.time(opt <- nlminb(obj$par,obj$fn,obj$gr))
 
   #calculate the parameter results
+  cat("Calculating the standard errors")
   srep <- summary(sdreport(obj))
 
   #calculate the latent behavioral states with the Viterbi algorithm
@@ -62,7 +64,7 @@ fitSwim <- function(data, ts, model_type="SHMMM"){
   #return the object and the parameter results
   regData = data.frame(iLoc)
   names(regData) = c("lon", "lat")
-  rslts <- list(regData = regData, obj=obj, parms=srep, states=states+1)
+  rslts <- list(regData = regData, obj=obj, parms=srep, states=states+1, time=time)
 
   class(rslts) <- "swim" #set class for later (summary, print, and plot functions)
   
