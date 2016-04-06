@@ -3,19 +3,23 @@
 fitSwim <- function(x, ...) UseMethod("swim")
 
 
-fitSwim <- function(data, ts, model_type="SHMMM"){
+fitSwim <- function(data, ts, model_type="SHMMM", regularize=TRUE){
   
   #data input, n X 2 vector
   #ts timestep (hours)
 
-  
-  #interpolate the data to regular time intervals
+  if(regularize==TRUE){
+    #interpolate the data to regular time intervals
   delta = ts*60*60 #time step in seconds
   t0 = data$date[1] #first time step
   tT = data$date[length(data$date)] #the final date time
   t = seq(t0, tT, by=delta) #all the time values for interpolation
   iLoc <- cbind(approx(data$date, data$lon, xout = t)$y,
                 approx(data$date, data$lat, xout = t)$y)
+  } else {
+    iLoc = cbind(data$lon, data$lat)
+  }
+  
   
   
   #load TMB

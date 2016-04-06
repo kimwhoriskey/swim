@@ -4,12 +4,13 @@
 \title{Fit a switching movement model (swim)}
 \description{Fits a switching movement model to an animal track. Currently the only model available is the Switching Hidden Markov Movement Model, the SHMMM, which is inappropriate for data with large measurement error.}
 
-\usage{fitSwim(data, ts)}
+\usage{fitSwim(data, ts, model_type="SHMMM", regularize=TRUE)}
 
 \arguments{
-\item{data}{A data.frame with three columns specifically named. The column "date" should include the date-time step of the animal track as a POSIX class. The columns "lon" and "lat" denote the longitude and latitude, respectively.}
+\item{data}{A data.frame with either two columns if regularize=FALSE, or three columns if regularize=TRUE. The columns must be specifically named. The column "date" should include the date-time step of the animal track as a POSIX class. The columns "lon" and "lat" denote the longitude and latitude, respectively.}
 \item{ts}{The time step for interpolating the data, in hours. Fractions of hours are also possible.}
 \item{model_type}{The swim model to be fit. Currently the only available option is the SHMMM, the Switching Hidden Markov Movement Model.}
+\item{regularize}{Logical. Does your data need to be regularized in time? If so, then use regularize=TRUE. If your data already occurs in discrete-time, then use regularize=FALSE.}
 }
 \details{...}
 

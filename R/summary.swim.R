@@ -2,6 +2,8 @@
 
 summary.swim <- function(object, ...){
   
+  time = object$time
+  
   #object = test
   
   #Summary (Z statistics)
@@ -47,10 +49,10 @@ summary.swim <- function(object, ...){
   lower95 = append(lower95, 1/(1+exp(-lower95[8]))) #a21, note have to logit these ones but I'm not sure if that's correct
   upper95 = append(upper95, 1/(1+exp(-upper95[8]))) 
   
-  lower95 = append(lower95, 1/(1+exp(-(log(sharkSHMMMcis[17,1]/(1-sharkSHMMMcis[17,1])) - 1.96*sharkSHMMMcis[7,2]))))
-  upper95 = append(upper95, 1/(1+exp(-(log(sharkSHMMMcis[17,1]/(1-sharkSHMMMcis[17,1])) + 1.96*sharkSHMMMcis[7,2]))))
-  lower95 = append(lower95, 1/(1+exp(-(log(sharkSHMMMcis[18,1]/(1-sharkSHMMMcis[18,1])) - 1.96*sharkSHMMMcis[8,2]))))
-  upper95 = append(upper95, 1/(1+exp(-(log(sharkSHMMMcis[18,1]/(1-sharkSHMMMcis[18,1])) + 1.96*sharkSHMMMcis[8,2]))))
+  lower95 = append(lower95, 1/(1+exp(-(log(CIs[17,1]/(1-CIs[17,1])) - 1.96*CIs[7,2]))))
+  upper95 = append(upper95, 1/(1+exp(-(log(CIs[17,1]/(1-CIs[17,1])) + 1.96*CIs[7,2]))))
+  lower95 = append(lower95, 1/(1+exp(-(log(CIs[18,1]/(1-CIs[18,1])) - 1.96*CIs[8,2]))))
+  upper95 = append(upper95, 1/(1+exp(-(log(CIs[18,1]/(1-CIs[18,1])) + 1.96*CIs[8,2]))))
   
   CIs$lower95 = lower95
   CIs$upper95 = upper95
@@ -58,8 +60,8 @@ summary.swim <- function(object, ...){
   
   CIs
   
-  sum <- list(Ztest, CIs)
-  names(sum) <- c("Ztest", "CIs")
+  sum <- list(time, Ztest, CIs)
+  names(sum) <- c("Time", "Ztest", "CIs")
   class(sum) <- "summary.swim"
   
   sum
