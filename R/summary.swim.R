@@ -49,11 +49,12 @@ summary.swim <- function(object, ...){
   lower95 = append(lower95, 1/(1+exp(-lower95[8]))) #a21, note have to logit these ones but I'm not sure if that's correct
   upper95 = append(upper95, 1/(1+exp(-upper95[8]))) 
   
-  lower95 = append(lower95, 1/(1+exp(-(log(CIs[17,1]/(1-CIs[17,1])) - 1.96*CIs[7,2]))))
-  upper95 = append(upper95, 1/(1+exp(-(log(CIs[17,1]/(1-CIs[17,1])) + 1.96*CIs[7,2]))))
-  lower95 = append(lower95, 1/(1+exp(-(log(CIs[18,1]/(1-CIs[18,1])) - 1.96*CIs[8,2]))))
-  upper95 = append(upper95, 1/(1+exp(-(log(CIs[18,1]/(1-CIs[18,1])) + 1.96*CIs[8,2]))))
+  lower95 = append(lower95, 1-upper95[15])
+  upper95 = append(upper95, 1-lower95[15])
   
+  lower95 = append(lower95, 1-upper95[16])
+  upper95 = append(upper95, 1-lower95[16])
+
   CIs$lower95 = lower95
   CIs$upper95 = upper95
   

@@ -11,8 +11,8 @@ print.summary.swim <- function(sum, ...){
   cat("\n Confidence Intervals: \n")
   print(round(sum[[3]][9:18,-2], 7))
   
-  cat("\nWald Tests: \n")
-  
-  printCoefmat(sum[[2]][9:18,], P.values=TRUE, has.Pvalue=TRUE)
+#   cat("\nWald Tests: \n")
+#   
+#   printCoefmat(sum[[2]][9:18,], P.values=TRUE, has.Pvalue=TRUE)
 
 }

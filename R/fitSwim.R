@@ -55,11 +55,11 @@ fitSwim <- function(data, ts, model_type="SHMMM", regularize=TRUE){
   
   #Now we can pass the objective function and its derivatives into any regular R optimizer. 
   #We are using nlminb. 
-  cat("Optimizing the objective function")
+  cat("Optimizing the objective function \n")
   time = system.time(opt <- nlminb(obj$par,obj$fn,obj$gr))
 
   #calculate the parameter results
-  cat("Calculating the standard errors")
+  cat("Calculating the standard errors \n")
   srep <- summary(sdreport(obj))
 
   #calculate the latent behavioral states with the Viterbi algorithm
