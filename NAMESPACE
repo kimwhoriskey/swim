@@ -5,7 +5,6 @@ exportPattern(".")
 import(
 TMB, 
 mvtnorm, 
-rgdal, 
 sp
 )
 

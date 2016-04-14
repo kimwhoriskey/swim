@@ -9,7 +9,7 @@ print.summary.swim <- function(sum, ...){
   print(sum[[1]])
   
   cat("\n Confidence Intervals: \n")
-  print(round(sum[[3]][9:18,-2], 7))
+  print(round(sum[[2]][9:18,-2], 7))
   
 #   cat("\nWald Tests: \n")
 #   

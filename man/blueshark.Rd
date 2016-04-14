@@ -1,7 +1,6 @@
 \name{blueshark}
 \docType{data}
 \alias{blueshark}
-\alias{GPE3}
 \title{Blue Shark GPE3 Track}
 \description{
   This data set comprises the results from the GPE3 software applied to a blue shark track collected from a miniPAT tag deployed off Nova Scotia by the Ocean Tracking Network. 

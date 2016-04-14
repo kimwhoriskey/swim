@@ -6,21 +6,21 @@ summary.swim <- function(object, ...){
   
   #object = test
   
-  #Summary (Z statistics)
-  Ztest = as.data.frame(object$parms, 
-                       row.names= c("logitTheta1", "logitTheta2", 
-                                    "logitGamma1", "logitGamma2", 
-                                    "logSdlon", "logSdlat",  
-                                    "logA11", "logA21", 
-                                    "theta1", "theta2", 
-                                    "gamma1", "gamma2", 
-                                    "sdLon", "sdLat",  
-                                    "a11", "a21", "a12", "a22"))
-  Ztest$z.val = Ztest[,1]/Ztest[,2]
-  Ztest$p.val = 2*pnorm(-abs(Ztest$z.val))
+#   #Summary (Z statistics)
+#   Ztest = as.data.frame(object$parameters, 
+#                        row.names= c("logitTheta1", "logitTheta2", 
+#                                     "logitGamma1", "logitGamma2", 
+#                                     "logSdlon", "logSdlat",  
+#                                     "logA11", "logA21", 
+#                                     "theta1", "theta2", 
+#                                     "gamma1", "gamma2", 
+#                                     "sdLon", "sdLat",  
+#                                     "a11", "a21", "a12", "a22"))
+#   Ztest$z.val = Ztest[,1]/Ztest[,2]
+#   Ztest$p.val = 2*pnorm(-abs(Ztest$z.val))
   
   #Confidence Intervals
-  CIs = as.data.frame(object$parms, 
+  CIs = as.data.frame(object$parameters, 
                                row.names= c("logitTheta1", "logitTheta2", 
                                             "logitGamma1", "logitGamma2", 
                                             "logSdlon", "logSdlat", 
@@ -61,8 +61,8 @@ summary.swim <- function(object, ...){
   
   CIs
   
-  sum <- list(time, Ztest, CIs)
-  names(sum) <- c("Time", "Ztest", "CIs")
+  sum <- list(time, CIs)
+  names(sum) <- c("Time", "CIs")
   class(sum) <- "summary.swim"
   
   sum

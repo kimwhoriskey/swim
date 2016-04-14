@@ -2,7 +2,7 @@
 plotSwim = function(object){
   
   
-  requireNamespace("rgdal", quietly=TRUE)
+  #requireNamespace("rgdal", quietly=TRUE)
   requireNamespace("sp", quietly=TRUE)
 
   data(shpfiles)

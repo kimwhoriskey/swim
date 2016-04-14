@@ -3,7 +3,7 @@
 fitSwim <- function(x, ...) UseMethod("swim")
 
 
-fitSwim <- function(data, ts, model_type="SHMMM", regularize=TRUE){
+fitSwim <- function(data, ts, regularize=TRUE){
   
   #data input, n X 2 vector
   #ts timestep (hours)
@@ -65,10 +65,13 @@ fitSwim <- function(data, ts, model_type="SHMMM", regularize=TRUE){
   #calculate the latent behavioral states with the Viterbi algorithm
   states = obj$report()$states
   
+  #calculate minimized nll
+  nll = obj$fn()
+  
   #return the object and the parameter results
   regData = data.frame(iLoc)
   names(regData) = c("lon", "lat")
-  rslts <- list(regData = regData, obj=obj, parms=srep, states=states+1, time=time)
+  rslts <- list(regData = regData, obj=obj, parameters=srep, states=states+1, time=time, nll=nll)
 
   class(rslts) <- "swim" #set class for later (summary, print, and plot functions)
   
