@@ -8,6 +8,17 @@ fitSwim <- function(data, ts, regularize=TRUE){
   #data input, n X 2 vector
   #ts timestep (hours)
 
+  if(any(!class(data$date) %in% c("POSIXt", "POSIXct", "POSIXlt"))){
+    stop("Date-time vector is not a POSIX class")
+  }
+  
+  #normally if one is NA, so is the other
+  if(anyNA(data$lat)) {
+    data = data[which(!is.na(data$lat)),]
+    warning("Locations with NA value removed")
+  }
+  
+  
   if(regularize==TRUE){
     #interpolate the data to regular time intervals
   delta = ts*60*60 #time step in seconds
@@ -69,8 +80,8 @@ fitSwim <- function(data, ts, regularize=TRUE){
   nll = obj$fn()
   
   #return the object and the parameter results
-  regData = data.frame(iLoc)
-  names(regData) = c("lon", "lat")
+  regData = data.frame(t, iLoc)
+  names(regData) = c("date", "lon", "lat")
   rslts <- list(regData = regData, obj=obj, parameters=srep, states=states+1, time=time, nll=nll)
 
   class(rslts) <- "swim" #set class for later (summary, print, and plot functions)
