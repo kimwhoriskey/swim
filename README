@@ -1,3 +1,3 @@
-This package fits Switching Movement Models. Currently the only model available is the SHMMM (Switching Hidden Markov Movement Model), which is appropriate for highly accurate animal location data. 
+This package fits a Switching Movement Model. Currently the only model available is the SHMMM (Switching Hidden Markov Movement Model), which is appropriate for highly accurate animal location data. 
 
 This package additionally requires the packages TMB, mvtnorm, and sp. These packages need to be installed before swim is installed. mvtnorm and sp are available on CRAN and TMB is available from https://github.com/kaskr/adcomp

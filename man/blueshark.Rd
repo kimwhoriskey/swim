@@ -8,7 +8,5 @@
 \usage{blueshark}
 \format{A data.frame with three columns: the first contains the date-time stamps in POSIX, and the second and third have the longitude and latitude coordinates, respectively.}
 \source{Ocean Tracking Network}
-\references{
-  SHMMM paper.
-}
+
 \keyword{datasets}

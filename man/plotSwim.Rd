@@ -1,7 +1,7 @@
 \name{plotSwim}
 \alias{plotSwim}
 \title{Plot a swim object} 
-\description{Plots a swim object (the results of fitting the SHMMM) as a spatial object with surrounding land boundaries.}
+\description{Plots a swim object (the results of fitting the SHMMM) as a spatial object with surrounding land boundaries. }
 
 \usage{plotSwim(object)}
 
@@ -10,6 +10,10 @@
 }
 
 \author{K. Whoriskey}
+
+\references{
+Vector land data were made with Natural Earth.
+}
 
 \examples{
 data(blueshark)

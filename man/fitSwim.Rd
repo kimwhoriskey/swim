@@ -7,7 +7,7 @@
 \usage{fitSwim(data, ts, regularize=TRUE)}
 
 \arguments{
-\item{data}{A data.frame with either two columns if regularize=FALSE, or three columns if regularize=TRUE. The columns must be specifically named. The column "date" should include the date-time step of the animal track as a POSIX class. The columns "lon" and "lat" denote the longitude and latitude, respectively.}
+\item{data}{A data.frame with either two columns if regularize=FALSE, or three columns if regularize=TRUE. The columns must be specifically named. The column "date" should include the date-time step of the animal track as a POSIX class (not needed for regularize=FALSE). The columns "lon" and "lat" denote the longitude and latitude, respectively.}
 \item{ts}{The time step for interpolating the data, in hours. Fractions of hours are also possible.}
 \item{regularize}{Logical. Does your data need to be regularized in time? If so, then use regularize=TRUE. If your data already occurs in discrete-time, then use regularize=FALSE.}
 }
