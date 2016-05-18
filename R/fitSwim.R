@@ -37,13 +37,6 @@ fitSwim <- function(data, ts, regularize=TRUE){
   requireNamespace("TMB", quietly=TRUE)
   
   
-  #compiling the c++ function
-  #compile("SHMMM.cpp", flags="-Wno-unused-variable")
-  
-  #Loading the compiled c++ file into the R environment. 
-  #dyn.load(dynlib("SHMMM")) #need to fix this for PCs (or non-macs)
-  
-  
   #create a list of input data. The order must match the order in the c++ file!
   space = 0:1
   mu = c(0.5,0.5)
@@ -84,7 +77,7 @@ fitSwim <- function(data, ts, regularize=TRUE){
   names(regData) = c("date", "lon", "lat")
   rslts <- list(regData = regData, obj=obj, parameters=srep, states=states+1, time=time, nll=nll)
 
-  class(rslts) <- "swim" #set class for later (summary, print, and plot functions)
+  class(rslts) <- "swim" #set class (summary, print, and plot functions)
   
   return(rslts)
   

@@ -1,15 +1,9 @@
 #plot the swim fits
 
-plot.swim <- function(object,...){
+plot.swim <- function(x,...){
   
-  ##add shapefiles? Or define a whole new function to plot with shapefiles? 
-  
-  data = object$regData
-  states = object$states
-  
-#   plot(data$lat~data$lon, type="o", pch=20, cex=0.7, 
-#        col=ifelse(states==2, "blue", "grey"))
-  
+  data = x$regData
+  states = x$states
   
   plot(data[states==1,]$lat~data[states==1,]$lon, type="o", pch=20, cex=0.7, col="grey", 
        xlab="Longitude", ylab="Latitude")
