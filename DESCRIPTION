@@ -1,6 +1,6 @@
 Package: swim
 Title: Switching Markov Movement Models
-Version: 0.2.3
+Version: 0.2.4
 Date: 2017-02-10
 Author: Kim Whoriskey with contributions from C. M. Albertsen 
 Maintainer: Kim Whoriskey <kwhoriskey@dal.ca>
@@ -9,4 +9,4 @@ Imports: TMB, mvtnorm, sp
 LinkingTo: TMB, RcppEigen
 License: GPL-2
 NeedsCompilation: yes
-Packaged: 2017-02-11 23:06:20 UTC; kimwhoriskey
+Packaged: 2018-06-28 13:59:07 UTC; kimwhoriskey
