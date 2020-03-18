@@ -1,4 +1,4 @@
-blueshark: .Random.seed blueshark
+blueshark
 greyseal
 laketrout
-shpfiles: .Random.seed world
+shpfiles: world
