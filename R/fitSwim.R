@@ -3,7 +3,10 @@
 fitSwim <- function(x, ...) UseMethod("swim")
 
 
-fitSwim <- function(data, ts, regularize=TRUE){
+fitSwim <- function(data, ts, regularize=TRUE, pars=list(logitTheta1=0, logitTheta2=0, 
+                                                         logitGamma1=0, logitGamma2=0, 
+                                                         logSdlon=0, logSdlat=0, 
+                                                         logA=matrix(log(1),ncol=1,nrow=2))){
   
   #data input, n X 2 vector
   #ts timestep (hours)
@@ -47,10 +50,15 @@ fitSwim <- function(data, ts, regularize=TRUE){
   
   
   #create a list of input parameters. Again, order matters!
-  parameters <- list(logitTheta1=0, logitTheta2=0, 
-                     logitGamma1=0, logitGamma2=0, 
-                     logSdlon=0, logSdlat=0, 
-                     logA=matrix(log(1),ncol=1,nrow=2))
+  # if(pars==FALSE){
+  #   parameters <- list(logitTheta1=0, logitTheta2=0, 
+  #                      logitGamma1=0, logitGamma2=0, 
+  #                      logSdlon=0, logSdlat=0, 
+  #                      logA=matrix(log(1),ncol=1,nrow=2))
+  # } else {
+  parameters=pars
+  # }
+  
   
   
   #Then make an objective function, the negative log likelihood to minimize. 
@@ -75,7 +83,7 @@ fitSwim <- function(data, ts, regularize=TRUE){
   #return the object and the parameter results
   regData = data.frame(t, iLoc)
   names(regData) = c("date", "lon", "lat")
-  rslts <- list(regData = regData, obj=obj, parameters=srep, states=states+1, time=time, nll=nll)
+  rslts <- list(regData = regData, obj=obj, opt=opt, parameters=srep, states=states+1, time=time, nll=nll)
 
   class(rslts) <- "swim" #set class (summary, print, and plot functions)
   

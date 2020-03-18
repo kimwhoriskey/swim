@@ -1,8 +1,8 @@
 \name{fitSwim}
 \alias{fitSwim}
-\alias{SHMMM}
+\alias{HMMM}
 \title{Fit a switching movement model (swim)}
-\description{Fits a switching movement model to an animal track. Currently the only model available is the Switching Hidden Markov Movement Model, the SHMMM, which is inappropriate for data with large measurement error.}
+\description{Fits a switching movement model to an animal track. Currently the only model available is the Hidden Markov Movement Model, the HMMM, which is inappropriate for data with large measurement error.}
 
 \usage{fitSwim(data, ts, regularize=TRUE)}
 

@@ -8,7 +8,6 @@ Type objective_function<Type>::operator() ()
 {
   // Input data
   DATA_MATRIX(x); //track coordinates
-  //DATA_IVECTOR(b);  //set of possible states
   DATA_FACTOR(stateSpace);  //values in state-space
   DATA_VECTOR(initDist);  //specify initial probability
   
@@ -20,13 +19,9 @@ Type objective_function<Type>::operator() ()
   PARAMETER(logSdlon); // Process standard deviation in lon - log because sdlon > 0
   PARAMETER(logSdlat); // Process standard deviation in lat - log because sdlat > 0
 
-  //PARAMETER(logitRho); // Correlation coefficient for process variance - logit because -1 < rho < 1
-  
   PARAMETER_MATRIX(logA); //matrix of switching probabilities
   
   // Transformation of the input parameters to model format
-  //Type theta2 = theta1 + exp(logTheta2);
-  // Type theta2 = M_PI/(1.0+exp(-logTheta2)) + M_PI/2.0;
   Type theta1 = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; //between -pi and pi
   Type theta2 = 2*M_PI/(1.0+exp(-logitTheta2)); //between 0 and 2*pi
   vector<Type> theta(2);
@@ -40,8 +35,7 @@ Type objective_function<Type>::operator() ()
   gamma(1) = gamma2;
   Type sdLon = exp(logSdlon);
   Type sdLat = exp(logSdlat);
-  //Type rho = 2.0/(1.0+exp(-logitRho))-1.0;
-  
+
   // Report the parameters and their standard errors in their model format
   REPORT(theta1);
   REPORT(theta2);
@@ -49,14 +43,12 @@ Type objective_function<Type>::operator() ()
   REPORT(gamma2);
   REPORT(sdLon);
   REPORT(sdLat);
-  //REPORT(rho);
   ADREPORT(theta1);
   ADREPORT(theta2);
   ADREPORT(gamma1);
   ADREPORT(gamma2);
   ADREPORT(sdLon);
   ADREPORT(sdLat);
-  //ADREPORT(rho);
 
 
  //setting up the matrix of switching probabilities
@@ -67,13 +59,8 @@ Type objective_function<Type>::operator() ()
    for(int j = 0; j < logA.cols(); ++j){
      A(i,j) = exp(logA(i,j));  //ensures the probabilities we estimate are >0
    }
-   A(i,A.cols()-1) = 1.0; /*Remember that c++ is base 0, so the first position in a vector is 
-   actually called position 0. So this is setting the last column (which is not present in logA
-   equal to 1. We should be able to switch this 1 to any value we want, because the next line
-   ensures that all of the probabilities in each row are intrinsically linked, and will add to 1.*/
-   A.row(i) *= 1.0/A.row(i).sum(); /*keeps the sum across rows =1, specifically each element is 
-   divided by its row sum*/
-   //Note x *= 2 means x = 2*x
+   A(i,A.cols()-1) = 1.0; 
+   A.row(i) *= 1.0/A.row(i).sum(); 
  }
 
   REPORT(A);
@@ -85,15 +72,12 @@ Type objective_function<Type>::operator() ()
   Sigma << sdLon*sdLon, 0.0,
     0.0, sdLat*sdLat;
 
-  /*Setting up the likelihood variable for the process equation. nll_dens will return the 
-  negative log-likelihood value for the multivariate normal distribution with covariance
-  matrix Sigma. */
+  //Setting up process error
   MVNORM_t<Type> nll_dens(Sigma);
 
 
-  //Forward the Viterbi algorithm to calculate logLikelihood'
-  Type ll = 0.0; /*Going to calculate the log-likelihood, and then multiply by -1 at the 
-  end to get the negative log-likelihood*/
+  // Calculate log-likelihood
+  Type ll = 0.0; 
   matrix<Type> phi(1,stateSpace.size()); /* Here we are setting up the matrix of partial 
   or forward probabilities. The size is the number of states*/
   matrix<Type> T(2,2); //rotational matrix
@@ -125,7 +109,6 @@ Type objective_function<Type>::operator() ()
       phi(j) *= exp(-nll_dens(TMP));
     }
     
-    
     ll += log(phi.sum());  /*Summing up each of the probabilities and then adding the log of this
     to the log-likelihood. */
     phi *= 1.0/phi.sum();  /*resets the phi matrix to ensure the probabilities of being in each state
@@ -136,7 +119,7 @@ Type objective_function<Type>::operator() ()
 
   //Viterbi Algorithm to estimate states
   matrix<Type> v(x.cols(),stateSpace.size()); //T x s 
-  /* These are our delta-values, also the forward or partial probabilities. Throughout
+  /* These are our delta-values, also the partial probabilities. Throughout
   we deal with log-probabilities.*/
   matrix<int> ba(x.cols(),stateSpace.size()); //T x s, 
   /*This gives the back pointer, it saves the identity of the most likely state at time 
@@ -144,12 +127,6 @@ Type objective_function<Type>::operator() ()
   vector<int> states(x.cols()); //n, 
   /*This is where we will save the estimated states, i.e. bhat. */
 
-//   for(int j = 0; j < stateSpace.size(); ++j){
-//     v(0,j) = log(initDist(j));
-//     /*The first deltas are equal to the initial probabilities of being in 
-//     each state because we have no difference data for the first time step. */
-//   } 
-   
 
   
   matrix<Type> T2(2,2);
@@ -158,32 +135,22 @@ Type objective_function<Type>::operator() ()
   tmp = x.col(1)-x.col(0);   
   for(int j = 0; j < stateSpace.size(); ++j){
     v(0,j) = log(initDist(j))-nll_dens(tmp); 
-    /*The first deltas are equal to multiplying the first delta by the density or likelihood
-    value of the first differences. Since we are using logs for v, this corresponds to adding
-    the first v, which are just equal to the log-initial probabilities, to the log-density
-    of the first differences. Because nll_dens returns the negative log-likelihood, we have
-    to multiply by -1.*/
   }
   
   //Now we calculate the deltas for the rest of the data set
   for(int k = 1; k < (x.cols()-1); ++k){
-    
     for(int j = 0; j < stateSpace.size(); ++j){
       Type tmp = v(k-1,0) + log(A(0,j));  
-      
       ba(k,j) = 0; //back pointer
-      
       for(int i = 1; i < stateSpace.size(); ++i){
         if(v(k-1,i) + log(A(i,j)) > tmp){
           tmp = v(k-1,i) + log(A(i,j)); 
           ba(k,j) = i;
         }
       }
-      /*Now we're adding in the information from the observations*/
       T2 << cos(theta(j)), -sin(theta(j)),
             sin(theta(j)), cos(theta(j));
       TMP = (x.col(k+1)-x.col(k)) - T2*(x.col(k) - x.col(k-1))*Type(gamma(j));
-      
       v(k,j) = tmp-nll_dens(TMP);
     }
   }
@@ -202,25 +169,22 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    v(x.cols()-1,j) = tmp; //v(x.cols()-2,ba(x.cols()-1,j));
+    v(x.cols()-1,j) = tmp; 
   }
 
   
   REPORT(v); //In case we want to look at these to troubleshoot. 
   REPORT(ba);
   
-  //Writing out the states vector
-  //setting the last value of the states vector to zero
+  //Decoding the states vector
   states(x.cols()-1) = 0;
   for(int i = 1; i < stateSpace.size(); ++i){
     if(v(x.cols()-1,i)>v(x.cols()-1,i-1)){
       states(x.cols()-1) = i;
-      
     }
   }
   for(int k = 2; k < x.cols()+1; ++k){
-    states(x.cols()-k) = ba(x.cols()-k+1,states(x.cols()-k+1)); /*works backwards from the final
-    state estimate to get the sequence of previous states */
+    states(x.cols()-k) = ba(x.cols()-k+1,states(x.cols()-k+1)); 
   }
   
   REPORT(states);

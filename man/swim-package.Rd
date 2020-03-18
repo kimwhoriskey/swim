@@ -3,7 +3,7 @@
 \alias{swim}
 \docType{package}
 \title{Switching Movement Models}
-\description{Fit a behavioral hidden Markov model to continuous animal movement data. Currently the model provided is the Switching Hidden Markov Movement Model, the SHMMM, which estimates the behavioral states along an animal track. The SHMMM is appropriate for highly accurate data only.
+\description{Fit a behavioral hidden Markov model to continuous animal movement data. Currently the model provided is the Hidden Markov Movement Model, the HMMM, which estimates the behavioral states along an animal track. The HMMM is appropriate for highly accurate data only.
 
 This package additionally requires the R packages mvtnorm, sp, TMB. 
 }

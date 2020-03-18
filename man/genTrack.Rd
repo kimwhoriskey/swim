@@ -1,7 +1,7 @@
 \name{genTrack}
 \alias{genTrack}
 \title{Simulate animal track with switching behaviors}
-\description{Simulates an animal path according to the code of the Switching Hidden Markov Movement Model. Does not incorporate measurement error.}
+\description{Simulates an animal path according to the code of the Hidden Markov Movement Model (HMMM). Does not incorporate measurement error.}
 
 \usage{genTrack(T=500, theta=c(0,pi), gamma=c(0.7,0.2), 
                 Sigma=matrix(c(0.2*0.2,0,0,0.1*0.1),nrow=2), 
