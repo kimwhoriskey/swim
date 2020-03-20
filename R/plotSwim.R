@@ -1,7 +1,7 @@
 
 plotSwim = function(object){
   
-  requireNamespace("sp", quietly=TRUE)
+  # requireNamespace("sp", quietly=TRUE)
 
   data(shpfiles)
 
@@ -11,19 +11,18 @@ plotSwim = function(object){
   
   locs = data.frame(object$regData$lon, object$regData$lat)
   #make the spatial points data frame to get the location points
-  spdf <- SpatialPointsDataFrame(coords = locs, data=locs, 
-                                 proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
+  spdf <- sp::SpatialPointsDataFrame(coords = locs, data=locs, 
+                                 proj4string = sp::CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
   #make the spatial lines to connect the dots (locations)
-  line = Lines(list(Line(locs)), ID="path")
-  sl = SpatialLines(list(line))
+  line =sp:: Lines(list(sp::Line(locs)), ID="path")
+  sl = sp::SpatialLines(list(line))
   
-  #plot everything
-  plot(world, col="mediumseagreen", xlim=xlims, ylim=ylims, axes=TRUE)
-  plot(sl, add=TRUE, col="grey") 
+  plot(world, col="lightgrey", xlim=xlims, ylim=ylims, axes=TRUE)
+  plot(sl, add=TRUE, col="black") 
   plot(spdf[which(object$states==1),], add=TRUE, pch=20, cex=0.7, type="o", 
-       col="grey")
+       col="royalblue")
   plot(spdf[which(object$states==2),], add=TRUE, pch=20, cex=0.7, type="o", 
-       col="blue")
+       col="tomato")
   
 }
 

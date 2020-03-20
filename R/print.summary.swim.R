@@ -1,8 +1,8 @@
 #prints the output from the summary of the swim object
 
-print.summary.swim <- function(x, ...){
+print.summary.swim <- function(x){
   
-  cat("Switching Hidden Markov Movement Model:\n")
+  cat("Hidden Markov Movement Model:\n")
   
   cat("\n Time to fit: \n")
   

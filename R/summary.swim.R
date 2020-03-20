@@ -1,6 +1,6 @@
 #Get the Wald tests and the Confidence intervals for the parameter values
 
-summary.swim <- function(object, ...){
+summary.swim <- function(object){
   
   time = object$time
   
@@ -30,8 +30,12 @@ summary.swim <- function(object, ...){
                                             "sdLon", "sdLat",  
                                             "a11", "a21", "a12", "a22"))
   
+  # calculate all of the confidence intervals in the working space
   lower95 = CIs[1:8,1] - 1.96*CIs[1:8,2]
   upper95 = CIs[1:8,1] + 1.96*CIs[1:8,2]
+  
+  # then apply a transformation to get them on the observed space
+  # previously just using the delta method gave me confidence intervals outside of the observed space
   lower95 = append(lower95, 2*pi/(1.0+exp(-lower95[1])) - pi) #theta1
   upper95 = append(upper95, 2*pi/(1.0+exp(-upper95[1])) - pi)
   lower95 = append(lower95, 2*pi/(1.0+exp(-lower95[2]))) #theta2
@@ -46,7 +50,7 @@ summary.swim <- function(object, ...){
   upper95 = append(upper95, exp(upper95[6])) 
   lower95 = append(lower95, 1/(1+exp(-lower95[7]))) #a11, logit
   upper95 = append(upper95, 1/(1+exp(-upper95[7]))) 
-  lower95 = append(lower95, 1/(1+exp(-lower95[8]))) #a21, note have to logit these ones but I'm not sure if that's correct
+  lower95 = append(lower95, 1/(1+exp(-lower95[8]))) #a21, 
   upper95 = append(upper95, 1/(1+exp(-upper95[8]))) 
   
   lower95 = append(lower95, 1-upper95[15])

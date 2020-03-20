@@ -1,15 +1,11 @@
-#fit the SHMMM
+#fit the HMMM
 
-fitSwim <- function(x, ...) UseMethod("swim")
-
-
-fitSwim <- function(data, ts, regularize=TRUE, pars=list(logitTheta1=0, logitTheta2=0, 
-                                                         logitGamma1=0, logitGamma2=0, 
-                                                         logSdlon=0, logSdlat=0, 
-                                                         logA=matrix(log(1),ncol=1,nrow=2))){
+fitSwim <- function(data, ts, regularize=TRUE, pars=list(working_theta = c(0, 0), 
+                                                         working_gamma = c(0, 0), 
+                                                         working_tau_lon=0, working_tau_lat=0, 
+                                                         working_A=matrix(c(log(0.75), log(0.25)),ncol=1,nrow=2))){
   
-  #data input, n X 2 vector
-  #ts timestep (hours)
+
 
   if(any(!class(data$date) %in% c("POSIXt", "POSIXct", "POSIXlt"))){
     stop("Date-time vector is not a POSIX class")
@@ -37,32 +33,11 @@ fitSwim <- function(data, ts, regularize=TRUE, pars=list(logitTheta1=0, logitThe
   
   
   #load TMB
-  requireNamespace("TMB", quietly=TRUE)
-  
-  
-  #create a list of input data. The order must match the order in the c++ file!
-  space = 0:1
-  mu = c(0.5,0.5)
-  dats <- list(x = t(iLoc),
-               # b=as.integer(space),
-               stateSpace=factor(space),
-               initDist=as.double(mu))
-  
-  
-  #create a list of input parameters. Again, order matters!
-  # if(pars==FALSE){
-  #   parameters <- list(logitTheta1=0, logitTheta2=0, 
-  #                      logitGamma1=0, logitGamma2=0, 
-  #                      logSdlon=0, logSdlat=0, 
-  #                      logA=matrix(log(1),ncol=1,nrow=2))
-  # } else {
-  parameters=pars
-  # }
-  
-  
+  # requireNamespace("TMB", quietly=TRUE)
   
   #Then make an objective function, the negative log likelihood to minimize. 
-  obj <- MakeADFun(dats,parameters,
+  obj <- TMB::MakeADFun(data=list(x=t(iLoc)),
+                   parameters = pars,
                    DLL="swim")
   
   #Now we can pass the objective function and its derivatives into any regular R optimizer. 
@@ -72,10 +47,17 @@ fitSwim <- function(data, ts, regularize=TRUE, pars=list(logitTheta1=0, logitThe
 
   #calculate the parameter results
   cat("Calculating the standard errors \n")
-  srep <- summary(sdreport(obj))
+  srep <- summary(TMB::sdreport(obj))
 
-  #calculate the latent behavioral states with the Viterbi algorithm
+  #get the latent behavioral states with the Viterbi algorithm
   states = obj$report()$states
+  
+  # get the stationary distribution
+  stationary <- obj$report()$delta
+  
+  # get the one step ahead (forecast pseudo) residuals
+  pseudos <- as.data.frame(qnorm(obj$report()$pseudo[-1,]))
+  names(pseudos) <- c("lon", "lat")
   
   #calculate minimized nll
   nll = obj$fn()
@@ -83,7 +65,12 @@ fitSwim <- function(data, ts, regularize=TRUE, pars=list(logitTheta1=0, logitThe
   #return the object and the parameter results
   regData = data.frame(t, iLoc)
   names(regData) = c("date", "lon", "lat")
-  rslts <- list(regData = regData, obj=obj, opt=opt, parameters=srep, states=states+1, time=time, nll=nll)
+  rslts <- list(regData = regData, 
+                obj=obj, opt=opt, 
+                parameters=srep, 
+                states=states, stationary=stationary, 
+                pseudos=pseudos,
+                time=time, nll=nll)
 
   class(rslts) <- "swim" #set class (summary, print, and plot functions)
   

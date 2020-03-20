@@ -1,5 +1,5 @@
- #include <TMB.hpp>
- 
+#include <TMB.hpp>
+
 using namespace density;
 
 
@@ -8,191 +8,222 @@ Type objective_function<Type>::operator() ()
 {
   // Input data
   DATA_MATRIX(x); //track coordinates
-  DATA_FACTOR(stateSpace);  //values in state-space
-  DATA_VECTOR(initDist);  //specify initial probability
   
   // Input parameters - i.e. parameters to estimate.
-  PARAMETER(logitTheta1); //first turning angle
-  PARAMETER(logitTheta2); //second turning angle, add to the first and attempt to make it larger
-  PARAMETER(logitGamma1); // First autocorrelation - logit because 0 < gamma < 1
-  PARAMETER(logitGamma2); // First autocorrelation - logit because 0 < gamma < 1
-  PARAMETER(logSdlon); // Process standard deviation in lon - log because sdlon > 0
-  PARAMETER(logSdlat); // Process standard deviation in lat - log because sdlat > 0
-
-  PARAMETER_MATRIX(logA); //matrix of switching probabilities
+  PARAMETER_VECTOR(working_theta);
+  PARAMETER_VECTOR(working_gamma); // First autocorrelation - logit because 0 < gamma < 1
+  
+  PARAMETER(working_tau_lon); // Process standard deviation in lon - log because sdlon > 0
+  PARAMETER(working_tau_lat); // Process standard deviation in lat - log because sdlat > 0
+  
+  PARAMETER_MATRIX(working_A); //matrix of switching probabilities
   
   // Transformation of the input parameters to model format
-  Type theta1 = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; //between -pi and pi
-  Type theta2 = 2*M_PI/(1.0+exp(-logitTheta2)); //between 0 and 2*pi
+  // I think leave it as two for now, but this can be generalized like A
   vector<Type> theta(2);
-  theta(0) = theta1;
-  theta(1) = theta2;
-  Type gamma1 = 1.0/(1.0+exp(-logitGamma1));
-  //Type gamma2 = gamma1/(1.0+exp(-logitGamma2)); //autocorrelation gamma2 < gamma1
-  Type gamma2 = 1.0/(1.0+exp(-logitGamma2));  //gamma's are unrelated
+  theta(0) = 2*M_PI/(1.0+exp(-working_theta(0))) - M_PI; // -pi to pi
+  theta(1) = 2*M_PI/(1.0+exp(-working_theta(1))); // 0 to 2pi
+  // vector<Type> theta = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; //not sure if needed
+  
+  // vector<Type> gamma = working_gamma; //1.0/(1.0+exp(-working_gamma));
+  //    vector<Type> gamma = 1.0/(1.0+exp(-working_gamma));
   vector<Type> gamma(2);
-  gamma(0) = gamma1;
-  gamma(1) = gamma2;
-  Type sdLon = exp(logSdlon);
-  Type sdLat = exp(logSdlat);
-
+  gamma(0) = 1.0/(1.0+exp(-working_gamma(0)));
+  gamma(1) = gamma(0)/(1.0+exp(-working_gamma(1)));
+  
+  Type tau_lon = exp(working_tau_lon);
+  Type tau_lat = exp(working_tau_lat);
+  
   // Report the parameters and their standard errors in their model format
-  REPORT(theta1);
-  REPORT(theta2);
-  REPORT(gamma1);
-  REPORT(gamma2);
-  REPORT(sdLon);
-  REPORT(sdLat);
-  ADREPORT(theta1);
-  ADREPORT(theta2);
-  ADREPORT(gamma1);
-  ADREPORT(gamma2);
-  ADREPORT(sdLon);
-  ADREPORT(sdLat);
-
-
- //setting up the matrix of switching probabilities
- matrix<Type> A(logA.rows(),logA.cols()+1); /*adding one more column to A than was 
+  ADREPORT(theta);
+  ADREPORT(gamma);
+  ADREPORT(tau_lon);
+  ADREPORT(tau_lat);
+  
+  
+  //setting up the matrix of switching probabilities
+  int m = working_A.rows(); // number of states
+  int n_obs = x.cols();
+  
+  matrix<Type> A(m, m); /*adding one more column to A than was
  present in logA */
-
- for(int i = 0; i < A.rows(); ++i){
-   for(int j = 0; j < logA.cols(); ++j){
-     A(i,j) = exp(logA(i,j));  //ensures the probabilities we estimate are >0
-   }
-   A(i,A.cols()-1) = 1.0; 
-   A.row(i) *= 1.0/A.row(i).sum(); 
- }
-
+  
+  for(int i = 0; i < m; ++i){
+    for(int j = 0; j < (m-1); ++j){
+      A(i,j) = exp(working_A(i,j));  //ensures the probabilities we estimate are >0
+    }
+    A(i,m-1) = 1.0;
+    A.row(i) *= 1.0/A.row(i).sum();
+  }
+  
   REPORT(A);
   ADREPORT(A);
-
-
+  REPORT(m);
+  
+  
+  // System of equations for finding stationary distribution:    'I - A + 1'
+  matrix<Type> system(m, m);
+  for(int i=0; i<m; i++) {
+    for(int j=0; j<m; j++) {
+      if( i ==j ) {
+        system(i,j) = 1 - A(j,i) + 1;
+      } else {
+        system(i,j) = 0 - A(j,i) + 1;
+      }
+    }
+  } 
+  
+  // vector of ones for finding stationary distribution
+  vector<Type> ones(m);
+  for(int i=0; i<m; i++) {
+    ones(i) = 1.0;
+  }
+  
+  // take the inverse of the system matrix and then multiply by the vector of ones
+  matrix<Type> sys_inverse = system.inverse();
+  vector<Type> delta = sys_inverse*ones; 
+  
+  matrix<Type> delta_row(1,m);
+  for(int i=0; i<m; i++) {
+    delta_row(0,i) = delta(i); 
+  }
+  
+  //
+  REPORT(delta);
+  REPORT(delta_row);
+  //
+  
+  
+  
   // Variance-covariance matrix for the process equation.
-  matrix<Type> Sigma(2,2);
-  Sigma << sdLon*sdLon, 0.0,
-    0.0, sdLat*sdLat;
-
+  matrix<Type> Tau(2,2);
+  Tau << tau_lon*tau_lon, 0.0,
+         0.0, tau_lat*tau_lat;
+  
   //Setting up process error
-  MVNORM_t<Type> nll_dens(Sigma);
-
-
-  // Calculate log-likelihood
-  Type ll = 0.0; 
-  matrix<Type> phi(1,stateSpace.size()); /* Here we are setting up the matrix of partial 
-  or forward probabilities. The size is the number of states*/
+  MVNORM_t<Type> nll_dens(Tau);
+  
+  
+  //// probability density matrices
   matrix<Type> T(2,2); //rotational matrix
   vector<Type> TMP(2); //temporary variable
   
-  //Initial contribution
-  for(int i = 0; i < stateSpace.size(); ++i){
-    phi(i) = initDist(i);  /*this is data input; an initial state probability vector.  */
-  }
-
-  TMP = x.col(1)-x.col(0);
-  for(int j=0; j < stateSpace.size(); ++j){
-    phi(j) *= exp(-nll_dens(TMP));
-  }
-  ll += log(phi.sum());  //add contribution to the likelihood
-  phi *= 1.0/phi.sum();  //reset the phi matrix
-
-  //the rest of the data
-  for(int i = 2; i < x.cols(); ++i){
-      phi = phi*A;  //multiply phi by the switching probabilities
-      
-    for(int j = 0; j < stateSpace.size(); ++j){
-      
-      //process equation
-      T << cos(theta(j)), -sin(theta(j)),
-           sin(theta(j)), cos(theta(j));
-      TMP = (x.col(i)-x.col(i-1)) - T*(x.col(i-1) - x.col(i-2))*Type(gamma(j));
-      
-      phi(j) *= exp(-nll_dens(TMP));
-    }
-    
-    ll += log(phi.sum());  /*Summing up each of the probabilities and then adding the log of this
-    to the log-likelihood. */
-    phi *= 1.0/phi.sum();  /*resets the phi matrix to ensure the probabilities of being in each state
-    sum to 1. Then the calculation kicks in again. */
-  }
-
-
-
-  //Viterbi Algorithm to estimate states
-  matrix<Type> v(x.cols(),stateSpace.size()); //T x s 
-  /* These are our delta-values, also the partial probabilities. Throughout
-  we deal with log-probabilities.*/
-  matrix<int> ba(x.cols(),stateSpace.size()); //T x s, 
-  /*This gives the back pointer, it saves the identity of the most likely state at time 
-  t-1 that led to a particular state of interest at time t.*/
-  vector<int> states(x.cols()); //n, 
-  /*This is where we will save the estimated states, i.e. bhat. */
-
-
-  
-  matrix<Type> T2(2,2);
-  vector<Type> tmp(2);
-  
-  tmp = x.col(1)-x.col(0);   
-  for(int j = 0; j < stateSpace.size(); ++j){
-    v(0,j) = log(initDist(j))-nll_dens(tmp); 
-  }
-  
-  //Now we calculate the deltas for the rest of the data set
-  for(int k = 1; k < (x.cols()-1); ++k){
-    for(int j = 0; j < stateSpace.size(); ++j){
-      Type tmp = v(k-1,0) + log(A(0,j));  
-      ba(k,j) = 0; //back pointer
-      for(int i = 1; i < stateSpace.size(); ++i){
-        if(v(k-1,i) + log(A(i,j)) > tmp){
-          tmp = v(k-1,i) + log(A(i,j)); 
-          ba(k,j) = i;
+  array<Type> P_array(m, m, n_obs);
+  array<Type> C_lon_array(m, m, n_obs);
+  array<Type> C_lat_array(m, m, n_obs);
+  for(int k=0; k<n_obs; k++) {    // k indexes time
+    for(int i=0; i<m; i++) {
+      for(int j=0; j<m; j++) { // i and j both index behavioural state
+        if( i==j ) { // diagonal entries
+          //process equation
+          if(k == 0){
+            P_array(i,j,k) = 0.0;
+            C_lon_array(i,j,k) = 0.0;
+            C_lat_array(i,j,k) = 0.0;
+          } else if (k == 1){
+            TMP = x.col(1)-x.col(0);
+            P_array(i,j,k) = exp(-nll_dens(TMP));
+            C_lon_array(i,j,k) = pnorm(TMP(0)/tau_lon);
+            C_lat_array(i,j,k) = pnorm(TMP(1)/tau_lat);
+          } else {
+            T << cos(theta(i)), -sin(theta(i)),
+                 sin(theta(i)), cos(theta(i));
+            TMP = (x.col(k)-x.col(k-1)) - T*(x.col(k-1) - x.col(k-2))*Type(gamma(i));
+            P_array(i,j,k) = exp(-nll_dens(TMP));
+            C_lon_array(i,j,k) = pnorm(TMP(0)/tau_lon);
+            C_lat_array(i,j,k) = pnorm(TMP(1)/tau_lat);
+          }
+        } else {
+          P_array(i,j,k) = 0.0; //off-diagonals are zero
+          C_lon_array(i,j,k) = 0.0;
+          C_lat_array(i,j,k) = 0.0;
         }
       }
-      T2 << cos(theta(j)), -sin(theta(j)),
-            sin(theta(j)), cos(theta(j));
-      TMP = (x.col(k+1)-x.col(k)) - T2*(x.col(k) - x.col(k-1))*Type(gamma(j));
-      v(k,j) = tmp-nll_dens(TMP);
     }
+  } // matrix form for ease of forward algorithm
+  
+  REPORT(P_array);
+  
+  array<Type> viterbi(m, n_obs);    // Columns index time, rows index state
+  array<Type> forward_max(m);    // Vector of most likely states
+  vector<int> states(n_obs);
+  
+  
+  int min = 0;
+  int max = n_obs;
+  
+  //starting state likelihoods
+  for(int i=0; i<m; i++) {
+    viterbi(i,min) = log(delta(i));
   }
   
-  
-//the last step  
-  for(int j = 0; j < stateSpace.size(); ++j){
-    Type tmp = v(x.cols()-2,0) + log(A(0,j));  
-    
-    ba(x.cols()-1,j) = 0; //back pointer
-    
-    for(int i = 1; i < stateSpace.size(); ++i){
-      if(v(x.cols()-2,i) + log(A(i,j)) > tmp){
-        tmp = v(x.cols()-2,i) + log(A(i,j)); 
-        ba(x.cols()-1,j) = i;
+  for(int k=(min+1); k<max; k++) {
+    for(int i=0; i<m; i++) {
+      for(int j=0; j<m; j++) {
+        forward_max(j) = viterbi(j,k-1) + log(A(i,j)); // transition probabilities
       }
-    }
-
-    v(x.cols()-1,j) = tmp; 
-  }
-
-  
-  REPORT(v); //In case we want to look at these to troubleshoot. 
-  REPORT(ba);
-  
-  //Decoding the states vector
-  states(x.cols()-1) = 0;
-  for(int i = 1; i < stateSpace.size(); ++i){
-    if(v(x.cols()-1,i)>v(x.cols()-1,i-1)){
-      states(x.cols()-1) = i;
+      viterbi(i,k) = forward_max.maxCoeff() + log(P_array(i,i,k));    // Choose most likely transition
     }
   }
-  for(int k = 2; k < x.cols()+1; ++k){
-    states(x.cols()-k) = ba(x.cols()-k+1,states(x.cols()-k+1)); 
+  
+  REPORT(viterbi);
+  
+  Eigen::Index max_row; 
+  Eigen::Index max_col;
+  Type foo;
+  
+  // Get the last column of viterbi matrix for backwards probabilities
+  matrix<Type> column = viterbi.col(max-1);  // column matrix, the last column, should be mx1
+  foo = column.maxCoeff(&max_row, &max_col);    // Sends index of largest coefficient to max_row (don't care about max_col)
+  //foo contains the maximum value. max_row contains the row where foo occurs.
+  //max_col contains the column at which foo occurs (doesn't matter cause just one column)
+  states(max-1) = max_row + 1;    
+  
+  // Backwards recursion
+  for(int k=n_obs-2; k>=0; k--) {
+    for(int i=0; i<m; i++) { // index state
+      column(i,0) = viterbi(i,k) + log(A(i,max_row));    // backwards Viterbi coefficient
+    }
+    foo = column.maxCoeff(&max_row, &max_col);    // sends index of largest coefficient to max_row
+    // figures out which of the previous states led to the next one
+    states(k) = max_row + 1;  
   }
   
   REPORT(states);
-
- 
-
-
-  return -ll;
-
+  //
+  
+  
+  
+  Type ll = 0.0;
+  
+  // Forward Probabilities as row vector
+  matrix<Type> alpha(1,m);
+  // forecast pseudoresiduals
+  matrix<Type> alphas(n_obs, m);
+  matrix<Type> pseudo(n_obs, 2);
+  
+  for(int k=0; k<n_obs; k++) {
+    if( k == 0 ) {
+      pseudo(k) = delta.sum();
+      alpha = delta_row;
+      alphas.row(k) = alpha;
+    } else {
+      pseudo(k,0) = ( alpha*A * ( C_lon_array.col(k).matrix())).sum() / alpha.sum();   // pseudoresidual for the kth longitude
+      pseudo(k,1) = ( alpha*A * ( C_lat_array.col(k).matrix())).sum() / alpha.sum();   // pseudoresidual for the kth latitude
+      alpha = alpha* ( A ) * ( P_array.col(k).matrix() ); // Add k'th observation to forward probability
+      alphas.row(k) = alpha;
+    }
+    ll += log(alpha.sum());  // add log of forward probability to recursive likelihood
+    alpha = alpha/alpha.sum();    // rescale forward probabilities to sum to 1
+  }
+  
+  REPORT(alphas);
+  REPORT(pseudo);
+  return -ll; 
+  
+  
+  
+  
 }
+
 
