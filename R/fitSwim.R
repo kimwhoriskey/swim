@@ -1,5 +1,6 @@
-#fit the HMMM
 
+#fit the HMMM
+#' @export
 fitSwim <- function(data, ts, regularize=TRUE, pars=list(working_theta = c(0, 0), 
                                                          working_gamma = c(0, 0), 
                                                          working_tau_lon=0, working_tau_lat=0, 
@@ -30,10 +31,6 @@ fitSwim <- function(data, ts, regularize=TRUE, pars=list(working_theta = c(0, 0)
     iLoc = cbind(data$lon, data$lat)
   }
   
-  
-  
-  #load TMB
-  # requireNamespace("TMB", quietly=TRUE)
   
   #Then make an objective function, the negative log likelihood to minimize. 
   obj <- TMB::MakeADFun(data=list(x=t(iLoc)),

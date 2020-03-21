@@ -1,5 +1,5 @@
 #prints the output from the summary of the swim object
-
+#' @export
 print.summary.swim <- function(x){
   
   cat("Hidden Markov Movement Model:\n")

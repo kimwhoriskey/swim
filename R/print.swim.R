@@ -1,3 +1,4 @@
+#' @export
 print.swim <- function(object){
   
   cat("----------------------------------------------------------- \n the convergence was ... \n\n")

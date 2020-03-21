@@ -1,7 +1,7 @@
 #' Simulate Correlated Random Walk Data
 #'
 #'  Simulate data from either a DCRWS movement process or a conditional autoregressive (step length and turning angle) process. Can simulate with or without measurement error. 
-#' 
+#' @export 
 #' @param n_x Number of simulated true locations. 
 #' @param start_seed Starting seed
 #' @param movement_process Type of process model to simulate from. "DCRWS" implies the first-difference correlated random walk, while "carHMM" is the conditional autoregressive correlated random walk. 

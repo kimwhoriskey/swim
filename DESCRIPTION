@@ -5,8 +5,8 @@ Date: 2020-03-20
 Author: Kim Whoriskey with contributions from C. M. Albertsen
 Maintainer: Kim Whoriskey <kwhoriskey@dal.ca>
 Description: Fit behavioral hidden Markov models to spatially continuous animal movement data. Currently the model provided is the Hidden Markov Movement Model, the HMMM, which estimates the behavioral state for each location of an animal track. The HMMM is appropriate for highly accurate data only. 
-Imports: mvtnorm, sp, TMB
-Depends: ggplot2
+Imports: mvtnorm, TMB
+Depends: ggplot2, sp
 LinkingTo: TMB, RcppEigen
 License: GPL-2
 RoxygenNote: 7.1.0

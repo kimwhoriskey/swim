@@ -9,6 +9,7 @@ get_qqline <- function(vec){
   return(c(m,b))
 }
 
+#' @export
 plot.swim <- function(x,...){
   
   # locations

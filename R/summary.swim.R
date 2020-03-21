@@ -1,5 +1,5 @@
 #Get the Wald tests and the Confidence intervals for the parameter values
-
+#' @export
 summary.swim <- function(object){
   
   time = object$time
