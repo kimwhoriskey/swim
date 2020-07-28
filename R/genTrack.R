@@ -1,23 +1,25 @@
 #' Simulate Correlated Random Walk Data
 #'
-#'  Simulate data from either a DCRWS movement process or a conditional autoregressive (step length and turning angle) process. Can simulate with or without measurement error. 
+#'  Simulate data from a DCRWS movement process with or without measurement error. 
 #' @export 
 #' @param n_x Number of simulated true locations. 
-#' @param start_seed Starting seed
-#' @param movement_process Type of process model to simulate from. "DCRWS" implies the first-difference correlated random walk, while "carHMM" is the conditional autoregressive correlated random walk. 
-#' @param process_pars List of relevant parameters depending on the movement process. 
+#' @param n_y Number of simulated observatioons, n_y does not necessarily = n_x.
+#' @param date1 Starting date.
+#' @param ts Time step.
+#' @param start_seed Starting seed.
+#' @param process_pars List of relevant parameters. 
 #' @param alpha Matrix of switching probabilities. Determines the number of states you wish to have. 
-#' @param start_loc Starting location in c(lon, lat). If NULL assumed to be (0,0).  
+#' @param start_loc Starting location in c(lon, lat). If NULL assumed to be (0,0).
+#' @param me Measurement error distribution, Gaussian or t.
+#' @param acprob Vector of relative proportions for drawing the numbers of observed locations from each Argos class   
 #' @return Simulated data set.
-genTrack <- function(n_x=500, 
-                     start_seed=42,
-                     movement_process="DCRWS",
+genTrack <- function(n_x=500, n_y=1500, 
+                     date1=Sys.time(), ts=3, start_seed=42,
                      process_pars = list(theta = c(0, pi),
                                          gamma = c(0.8,0.3),
                                          sdx = rep(0.1, 2)), 
                      alpha = matrix(c(0.95, 0.05, 0.05, 0.95), nrow=2, ncol=2),
-                     start_loc=NULL){
-
+                     me='t', acprob=NULL, psi = rep(0.3, 2)){
   
   set.seed(start_seed)
   
@@ -38,64 +40,77 @@ genTrack <- function(n_x=500,
   ######  true locations  ######
   ##############################
   
-  if(movement_process=="DCRWS"){
-    
-    X <- matrix(nrow=n_x, ncol=2)
-    if(is.null(start_loc)){
-      X[1,] <- rep(0,2)
-    } else {
-      X[1,] <- start_loc
-    }
-    X[2,] = mvtnorm::rmvnorm(1, X[1,], diag(process_pars$sdx, nrow=2)) 
-    for(i in 3:n_x){
-      Tr <- matrix(c(cos(process_pars$theta[b[i]]), -sin(process_pars$theta[b[i]]),
-                     sin(process_pars$theta[b[i]]), cos(process_pars$theta[b[i]])), 
-                   nrow=2, byrow=TRUE)
-      X[i,] <- mvtnorm::rmvnorm(1, X[i-1,] + process_pars$gamma[b[i]] * Tr %*% (X[i-1,] - X[i-2,]), diag(process_pars$sdx)) 
-    } 
-    
-  } else if (movement_process=="carHMM") {
-    
-    # step lengths is gamma distribution
-    sl <- numeric(n_x)
-    mu <- process_pars$mrl[b[i]]
-    sigma  <- process_pars$sigma[b[i]]
-    sl[2] <- rgamma(1, (mu/sigma)^2, scale=sigma^2/mu)
-    for(i in 3:n_x){
-      mu <- process_pars$acf[b[i]]*sl[i-1] + (1-process_pars$acf[b[i]])*process_pars$mrl[b[i]]
-      sigma  <- process_pars$sigma[b[i]]
-      sl[i] <- rgamma(1, shape=(mu/sigma)^2, scale=sigma^2/mu)
-    }
-    
-    # turning angles are wrapped cauchy
-    # parameters should be a list of vectors of the form list(location=c(pi,0,0), rho=c(0.2, 0.6, 0.8))
-    ta <- numeric(n_x)
-    for(i in 2:(n_x-1)) ta[i] <- CircStats::rwrpcauchy(1, location=process_pars$location[b[i]], rho=process_pars$rho[b[i]])
-    # ta[i] <- ta[i] - (2*pi)*floor((ta[i]+pi)/(2*pi))
-    
-    
-    X.geo <- data.frame(ta=ta, sl=sl)
-    
-    # turn the turning angles and step lengths into locations
-    # assume the first location is (0,0), and the first bearing is 0 degrees
-    
-    X  <- getPath(angles=ta*180/pi, type='turning', step_lengths=sl, 
-                  first_loc=start_loc, first_bearing=NULL)#*180/pi
-    
-  } else {
-    
-    stop("model not implemented...")
-    
-  }
-  
+  X <- matrix(nrow=n_x, ncol=2)
+  X[1,] <- rep(0,2)
+  X[2,] = mvtnorm::rmvnorm(1, X[1,], diag(process_pars$sdx, nrow=2)) 
+  for(i in 3:n_x){
+    Tr <- matrix(c(cos(process_pars$theta[b[i]]), -sin(process_pars$theta[b[i]]),
+                   sin(process_pars$theta[b[i]]), cos(process_pars$theta[b[i]])), 
+                 nrow=2, byrow=TRUE)
+    X[i,] <- mvtnorm::rmvnorm(1, X[i-1,] + process_pars$gamma[b[i]] * Tr %*% (X[i-1,] - X[i-2,]), diag(process_pars$sdx)) 
+  } 
+
+
 
   
-  if(movement_process=="DCRWS"){
-    rslt <- list(b=b, X=X)
-  } else { 
-    rslt <- list(b=b, X=X, X.geo=X.geo)
-  }
+  #observed locations
   
+  # regularization 
+  idx <- sample(2:n_x, n_y, replace=TRUE)
+  ji <- runif(n_y)
+  jidx <- data.frame(cbind(idx,ji))
+  jidx <- jidx[do.call("order",jidx[c("idx","ji")]),]
+  if(jidx[nrow(jidx),1] != n_x) jidx[nrow(jidx),1] = n_x
+  # set the last one to the last data point to avoid simulation problems
+  # sometimes there are no simulated observations in the final x interval
+  # to avoid model fitting problems I need to have data in the last interva;
+  # set seed to 1 or 7 before running gentrack , then check tail idx to see example
+  
+  
+  
+  Y <- matrix(nrow=n_y, ncol=2)
+  if(me == 'gau'){
+    for(i in 1:n_y){
+      y <- (1 - jidx[i,2]) * X[jidx[i,1]-1,] + jidx[i,2] * X[jidx[i,1],]
+      Y[i,] = y  + mvtnorm::rmvnorm(1, rep(0,2), diag(psi^2, nrow=2))
+    }
+  } else if(me == 't'){
+      all_classes <- c("B", "A", "0", "1", "2", "3")
+      ac <- sample(all_classes, n_y, replace=TRUE, prob=acprob)
+
+      #from marie's code
+      ############# parameter values for the argos classes
+      # Make Z class = B class
+      sigmalon <- (c(4.2050261, 0.507292, 2.1625936, 0.9020423, 0.3119293, 0.289866)/6366.71 * 180)/pi
+      sigmalat <- (c(3.041276, 0.5105468, 1.607056, 0.4603374, 0.2605126, 0.1220553)/6366.71 * 180)/pi
+      # If nu < 2 bsam sets it to 2
+      nulon <- c(2, 2, 2, 2.298819, 2, 3.070609)
+      nulat <- c(2, 2, 2, 3.896554, 6.314726, 2.075642)
+      
+      argos_error <- cbind(sigmalon, nulon, sigmalat, nulat)
+      row.names(argos_error) <- all_classes
+      data_error <- as.data.frame(argos_error[ac,])
+
+      for(i in 1:n_y){
+        y <- (1 - jidx[i,2]) * X[jidx[i,1]-1,] + jidx[i,2] * X[jidx[i,1],]
+        Y[i,1] <- y[1] + rt(1, data_error$nulon[i])*data_error$sigmalon[i]/psi    # longitude
+        Y[i,2] <- y[2] + rt(1, data_error$nulat[i])*data_error$sigmalat[i]/psi    # latitude
+      }
+  }
+
+
+  # get the simulated dates
+  # check the indexing on this
+  date_x <- seq(date1, date1+ts*3600*n_x, ts*3600)
+  date_y <- date1
+  for(i in 2:n_y) date_y = append(date_y, (jidx[i,2]) * 3600 * 3 + date_x[jidx[i,1]-1])
+  
+  obs <- data.frame(date=date_y, lon=Y[,1], lat=Y[,2])
+  if(me=='t') obs$ac = ac
+  
+  rslt <- list(b=b, X=X, Y=Y, jidx=jidx,
+                 date_x=date_x, date_y=date_y, obs=obs)
   return(rslt)
   
 }
+

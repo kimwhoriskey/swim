@@ -1,4 +1,6 @@
-
+#' @import dplyr
+#' @import sf
+#'
 #' @useDynLib swim
 dummy <- function() return(NULL)
 ############################################################
