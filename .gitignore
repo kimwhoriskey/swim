@@ -1,4 +1,5 @@
 *.o
 *.so
 *.DS_Store
+*.RData
 *.Rhistory

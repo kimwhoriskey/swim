@@ -1,6 +1,6 @@
-.git
-.gitignore
-.DS_Store
-.Rhistory
-^.*\.so
-^.*\.o
+^.git$
+^.gitignore$
+^.DS_Store$
+^.Rhistory$
+^.*\.so$
+^.*\.o$
