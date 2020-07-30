@@ -479,11 +479,12 @@ fit_issm <- function(obs,
   
   # put together the data list for the model
   ssm_dat <- list(model=1,
-                  y = t(array(c(obs$lon, obs$lat), dim=c(nrow(obs), 2))), 
-                  b = hmm_results[[1]]$b_hat-1,
-                  idx = idxs$idx, 
-                  jidx = idxs$jidx)
-  ssm_dat$ae = ae # options for either gaussian or t error? 
+                  dat=list(y = t(array(c(obs$lon, obs$lat), dim=c(nrow(obs), 2))), 
+                           b = hmm_results[[1]]$b_hat-1,
+                           idx = idxs$idx, 
+                           jidx = idxs$jidx,
+                           ae=ae))
+  # ssm_dat$ae = ae # options for either gaussian or t error? 
 
          
   # now get the parameters             
@@ -579,7 +580,7 @@ fit_issm <- function(obs,
     
     # update the data for the ssm, the only thing that changes is the behavioural states
     # taken from the most recent ssm
-    ssm_dat$b = hmm_results[[i]]$b_hat-1
+    ssm_dat$dat$b = hmm_results[[i]]$b_hat-1
     
     # get starting parameters for the ssm
     # starting values come from the most recent HMM, except for psi which comes from the last ssm

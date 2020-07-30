@@ -61,7 +61,6 @@ Type dcrwHMM(objective_function<Type> * obj) {
 
     REPORT(A);
     ADREPORT(A);
-    REPORT(m);
 
 
     // System of equations for finding stationary distribution:    'I - Gamma + 1'
@@ -75,26 +74,17 @@ Type dcrwHMM(objective_function<Type> * obj) {
             }
         }
     }
-
     // vector of ones for finding stationary distribution
     vector<Type> ones(m);
     for(int i=0; i<m; i++) {
         ones(i) = 1.0;
     }
-
     // take the inverse of the system matrix and then multiply by the vector of ones
     matrix<Type> sys_inverse = system.inverse();
-    vector<Type> delta = sys_inverse*ones; 
+    vector<Type> delta = sys_inverse*ones;
 
-    matrix<Type> delta_row(1,m);
-    for(int i=0; i<m; i++) {
-        delta_row(0,i) = delta(i); //creating a new vector identical to start_probs
-    }
-
-    //
     REPORT(delta);
-    REPORT(delta_row);
-    //
+
 
 
 
@@ -103,131 +93,41 @@ Type dcrwHMM(objective_function<Type> * obj) {
     Tau << tau_lon*tau_lon, 0.0,
     0.0, tau_lat*tau_lat;
 
-    //Setting up process error
-    MVNORM_t<Type> nll_dens(Tau);
 
 
     //// probability density matrices
     matrix<Type> T(2,2); //rotational matrix
     vector<Type> TMP(2); //temporary variable
 
-    array<Type> P_array(m, m, n_obs);
-    array<Type> C_lon_array(m, m, n_obs);
-    array<Type> C_lat_array(m, m, n_obs);
-    for(int k=0; k<n_obs; k++) {    // k indexes time
-        for(int i=0; i<m; i++) {
-            for(int j=0; j<m; j++) { // i and j both index behavioural state
-                if( i==j ) { // diagonal entries
-                    //process equation
-                    if(k == 0){
-                        P_array(i,j,k) = 0.0;
-                        C_lon_array(i,j,k) = 0.0;
-                        C_lat_array(i,j,k) = 0.0;
-                    } else if (k == 1){
-                        TMP = x.col(1)-x.col(0);
-                        P_array(i,j,k) = exp(-nll_dens(TMP));
-                        C_lon_array(i,j,k) = pnorm(TMP(0)/tau_lon);
-                        C_lat_array(i,j,k) = pnorm(TMP(1)/tau_lat);
-                    } else {
-                        T << cos(theta(i)), -sin(theta(i)),
-                        sin(theta(i)), cos(theta(i));
-                        TMP = (x.col(k)-x.col(k-1)) - T*(x.col(k-1) - x.col(k-2))*Type(gamma(i));
-                        P_array(i,j,k) = exp(-nll_dens(TMP));
-                        C_lon_array(i,j,k) = pnorm(TMP(0)/tau_lon);
-                        C_lat_array(i,j,k) = pnorm(TMP(1)/tau_lat);
-                    }
-                } else {
-                    P_array(i,j,k) = 0.0; //off-diagonals are zero
-                    C_lon_array(i,j,k) = 0.0;
-                    C_lat_array(i,j,k) = 0.0;
-                }
-            }
-        }
-    } // matrix form for ease of forward algorithm
 
-    REPORT(P_array);
+    array<Type> pdfs(m, m, n_obs);
+    pdfs = fdens(m, x, theta, gamma, Tau, false, false);
+    REPORT(pdfs);
 
-    array<Type> viterbi(m, n_obs);    // Columns index time, rows index state
-    array<Type> forward_max(m);    // Vector of most likely states
-    // array<Type> P_array = ta_array * sl_array; // the matrix of pdf's
+
+    // viterbi algorithm
     vector<int> states(n_obs);
-
-
-    int min = 0;
-    int max = n_obs;
-
-    //starting state likelihoods
-    for(int i=0; i<m; i++) {
-        viterbi(i,min) = log(delta(i));
-    }
-
-    for(int k=(min+1); k<max; k++) {
-        for(int i=0; i<m; i++) {
-            for(int j=0; j<m; j++) {
-                forward_max(j) = viterbi(j,k-1) + log(A(i,j)); // transition probabilities
-            }
-            viterbi(i,k) = forward_max.maxCoeff() + log(P_array(i,i,k));    // Choose most likely transition
-        }
-    }
-
-    REPORT(viterbi);
-
-    Eigen::Index max_row; // looks like this is the index of a vector
-    Eigen::Index max_col;
-    Type foo;
-
-    // Get the last column of viterbi matrix for backwards probabilities
-    matrix<Type> column = viterbi.col(max-1);  // column matrix, the last column, should be mx1
-    foo = column.maxCoeff(&max_row, &max_col);    // Sends index of largest coefficient to max_row (don't care about max_col)
-    //okay so foo contains the maximum value. max_row contains the row where foo occurs.
-    //max_col contains the column at which foo occurs (doesn't matter cause just one column)
-    states(max-1) = max_row + 1;    // Eigen::Index starts at 0, want it to start at 1
-
-    // Backwards recursion
-    for(int k=n_obs-2; k>=0; k--) {
-        for(int i=0; i<m; i++) { // index state
-            column(i,0) = viterbi(i,k) + log(A(i,max_row));    // backwards Viterbi coefficient
-        }
-        foo = column.maxCoeff(&max_row, &max_col);    // sends index of largest coefficient to max_row
-        // figures out which of the previous states led to the next one
-        states(k) = max_row + 1;    // Eigen::Index starts at 0, want it to start at 1
-    }
-
+    states = viterbi(m, x, delta, A, pdfs);
     REPORT(states);
-    //
 
 
+    array<Type> cdfslon(m, m, n_obs);
+    cdfslon = fdens(m, x, theta, gamma, Tau, true, true);
+    REPORT(cdfslon);
 
-    Type ll = 0.0;
+    array<Type> cdfslat(m, m, n_obs);
+    cdfslat = fdens(m, x, theta, gamma, Tau, true, false);
+    REPORT(cdfslat);
 
-    // Forward Probabilities as row vector
-    matrix<Type> alpha(1,m);
-    // let's store them all , then do the rest of the pseudoresids in R
-    matrix<Type> alphas(n_obs, m);
-    matrix<Type> pseudo(n_obs, 2);
 
-    for(int k=0; k<n_obs; k++) {
-        if( k == 0 ) {
-            pseudo(k) = delta.sum();
-            alpha = delta_row;
-            alphas.row(k) = alpha;
-        } else {
-            pseudo(k,0) = ( alpha*A * ( C_lon_array.col(k).matrix())).sum() / alpha.sum();   // pseudoresidual for the kth longitude
-            pseudo(k,1) = ( alpha*A * ( C_lat_array.col(k).matrix())).sum() / alpha.sum();   // pseudoresidual for the kth latitude
-            alpha = alpha* ( A ) * ( P_array.col(k).matrix() ); // Add k'th observation to forward probability
-            alphas.row(k) = alpha;
-        }
-        ll += log(alpha.sum());  // add log of forward probability to recursive likelihood
-        alpha = alpha/alpha.sum();    // rescale forward probabilities to sum to 1
-    }
-
-    REPORT(alphas);
+    forwardalgrslt<Type> forward;
+    forward  = forwardalg(x, delta, A, pdfs, cdfslon, cdfslat);
+    matrix<Type> pseudo = forward.pseudo;
+    Type ll = forward.ll;
     REPORT(pseudo);
-    return -ll; //+ dummy*dummy;
+    REPORT(ll);
 
-
-
-
+    return -ll;
 }
 
 #undef TMB_OBJECTIVE_PTR

@@ -3,17 +3,28 @@
 
 using namespace density;
 
+template<class Type>
+struct track {
+  array<Type> y;
+  vector<int> b;
+  vector<int> idx;
+  vector<Type> jidx;
+  matrix<Type> ae;
+  track(SEXP x) {
+    y = tmbutils::asArray<Type>(getListElement(x, "y"));
+    b = asVector<int>(getListElement(x, "b"));
+    idx = asVector<int>(getListElement(x, "idx"));
+    jidx = asVector<Type>(getListElement(x, "jidx"));
+    ae = asMatrix<Type>(getListElement(x, "ae"));
+  }
+};
 
 
 template<class Type>
 Type dcrwSSM(objective_function<Type> * obj) {
 
   // Input data
-  DATA_ARRAY(y); //track coordinates
-  DATA_IVECTOR(b); //vector of behavioural states, treated as known
-  DATA_IVECTOR(idx); // vector of the intervals of y in xhat
-  DATA_VECTOR(jidx); // proportion of the time interval of y in xhat
-  DATA_MATRIX(ae); //matrix nx4, all of the parameters for the t-distributions for lon and lat
+  DATA_STRUCT(dat, track);
 
   // Input parameters - i.e. parameters to estimate.
   PARAMETER_VECTOR(working_theta);
@@ -35,7 +46,7 @@ Type dcrwSSM(objective_function<Type> * obj) {
   //vector<Type> theta = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; // -pi to pi
 
   // vector<Type> gamma = working_gamma; //1.0/(1.0+exp(-working_gamma));
-//  vector<Type> gamma = 1.0/(1.0+exp(-working_gamma));
+  //  vector<Type> gamma = 1.0/(1.0+exp(-working_gamma));
   vector<Type> gamma(2);
   gamma(0) = 1.0/(1.0+exp(-working_gamma(0)));
   gamma(1) = gamma(0)/(1.0+exp(-working_gamma(1)));
@@ -90,87 +101,36 @@ Type dcrwSSM(objective_function<Type> * obj) {
   ADREPORT(psi);
 
 
- int n_obs = y.cols();
- int n_x = x.cols();
+  // Variance-covariance matrix for the process equation.
+  matrix<Type> Sigma(2,2);
+  Sigma << sigma_lon*sigma_lon, 0.0,
+  0.0, sigma_lat*sigma_lat;
 
 
 
 
-    // Variance-covariance matrix for the process equation.
-    matrix<Type> Sigma(2,2);
-    Sigma << sigma_lon*sigma_lon, 0.0,
-    0.0, sigma_lat*sigma_lat;
-    MVNORM_t<Type> nll_proc(Sigma);
+   //////// likelihood
 
-    //Calculate logLikelihood
-    Type nll = 0.0;
+  //Calculate logLikelihood
+  Type nll = 0.0;
 
-    vector<Type> tmp(2);
-    vector<Type> tmp2(2);
-    matrix<Type> T(2,2); //rotational matrix
-    vector<Type> xhat(2);
+  // behaviour equation
+  Type behav = behaviour(dat.b, delta, A);
+  REPORT(behav);
+  nll -= behav;
 
+  // movement equation
+  vector<Type> movevec = movement(x, dat.b, gamma, theta, Sigma);
+  nll += movevec.sum();
+  REPORT(movevec);
 
-    // behavioural state markov chain
-    // parameters (A) should always be fixed, but the constant is important to have
-    // in the likelihood for determining the best model
+  // measurement equation
+  vector<Type> measvec = measurement(dat.y, x, dat.idx, dat.jidx, dat.ae, psi);
+  REPORT(measvec);
+  nll += measvec.sum();
 
-    Type markovchain = log(delta(b(0)));
-    for(int i=1; i < n_x; ++i){
-        markovchain += log(A(b(i-1), b(i)));
-        // the A matrix is the previous state in rows, the next state in columns
-        // so the likelihood of this observed markov chain is just the right entries of the matrix added together
-    }
-    REPORT(markovchain);
-    nll -= markovchain;
-
-    //  report the likelihood values to troubleshoot
-    vector<Type> pe_vec(n_x);
-    vector<Type> me_vec_lon(n_obs);
-    vector<Type> me_vec_lat(n_obs);
-
-
-    // Initial process contribution
-
-    tmp = x.col(1)-x.col(0);
-    nll += nll_proc(tmp);
-    pe_vec(1) = nll_proc(tmp);
-
-    //movement (process) equation
-    for(int i = 2; i < n_x; ++i){
-
-        T << cos(Type(theta(b(i-1)))), -sin(Type(theta(b(i-1)))),
-        sin(Type(theta(b(i-1)))), cos(Type(theta(b(i-1)))); //might need to put types on this?
-        tmp = (x.col(i)-x.col(i-1)) - T*(x.col(i-1) - x.col(i-2))*Type(gamma(b(i)));
-
-        nll += nll_proc(tmp);
-        pe_vec(i) = nll_proc(tmp);
-
-    }
-
-    //measurement equation
-    for(int i = 0; i < n_obs; ++i){
-
-        xhat = (1.0-jidx(i)) * x.col(idx(i)-1) + jidx(i)*x.col(idx(i));
-        tmp = y.col(i);
-        tmp2 = tmp-xhat;
-        // nll += nll_meas(tmp-xhat); //MVNORM_t returns the negative log likelihood
-        // taken from Marie's DCRW_Argos.cpp file
-        // based on this pretty sure dt returns the log likelihood
-        nll -= ( 0.5*log(psi) - log(ae(i,0)) + dt(sqrt(psi)*tmp2(0)/ae(i,0),ae(i,1),true) ); // Longitude
-        me_vec_lon(i) = -(0.5*log(psi) - log(ae(i,0)) + dt(sqrt(psi)*tmp2(0)/ae(i,0),ae(i,1),true)); // Longitude
-        nll -= ( 0.5*log(psi) - log(ae(i,2)) + dt(sqrt(psi)*tmp2(1)/ae(i,2),ae(i,3),true) ); // Latitude
-        me_vec_lat(i) = -(0.5*log(psi) - log(ae(i,2)) + dt(sqrt(psi)*tmp2(1)/ae(i,2),ae(i,3),true)); // Latitude
-    }
-
-    Type nll2 = pe_vec.sum() + me_vec_lon.sum() + me_vec_lat.sum();
-    REPORT(nll2);
-    REPORT(nll);
-    REPORT(pe_vec);
-    REPORT(me_vec_lon);
-    REPORT(me_vec_lat);
-
-  return nll2;
+  REPORT(nll);
+  return nll;
 
 }
 
