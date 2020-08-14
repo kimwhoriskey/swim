@@ -16,8 +16,9 @@ regTrack <- function(dat, ts){
   regx <- as.data.frame(cbind(lon=approx(dat$date, dat$lon, xout = dates)$y,
                               lat=approx(dat$date, dat$lat, xout = dates)$y))
   #best guess of final state is final observation
-  regx <- rbind(regx, dat[nrow(dat),c("lon", "lat")])
-  return(list(regx=regx, xdates=c(dates, tail(dat,1)$date)))
+  # regx <- rbind(regx, dat[nrow(dat),c("lon", "lat")])
+  # return(list(regx=regx, xdates=c(dates, tail(dat,1)$date)))
+  return(list(regx=regx, xdates=dates))
 }
 
 
@@ -35,7 +36,8 @@ getJidx <- function(dat, ts){
   delta = ts*60*60 #time step in seconds
   t0 = dat$date[1] #first time step
   tT = dat$date[nrow(dat)] #the final date time
-  x_dates = seq(t0, tT+delta, by=delta) #all the time values for interpolation
+  # x_dates = seq(t0, tT+delta, by=delta) #all the time values for interpolation
+  x_dates = seq(t0, tT, by=delta) #all the time values for interpolation
   
   # interval of the y's in the xhats
   idx <- findInterval(dat$date, x_dates)

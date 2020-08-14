@@ -535,9 +535,9 @@ fit_issm <- function(obs,
                                                              p_start = p_start_ssm,
                                                              res=res,
                                                              mapping = ssm_map,
-                                                             inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                             silence=allsilent))#,
-                                                             #...))
+                                                             # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                             silence=allsilent,
+                                                             ...))
       # save the nll 
       nll_ssm[[1]] = ssm_results[[1]]$nll
       # save the new convergence, cue on this
@@ -625,9 +625,9 @@ fit_issm <- function(obs,
                                                                p_start = p_start_ssm,
                                                                res=res,
                                                                mapping = ssm_map,
-                                                               inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                               silence=allsilent))#,
-                                                               #...))
+                                                               # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                               silence=allsilent,
+                                                               ...))
         # save the nll 
       nll_ssm[[i]] = ssm_results[[i]]$nll
       # save the new convergence, cue on this
