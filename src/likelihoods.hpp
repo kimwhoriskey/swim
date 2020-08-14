@@ -17,7 +17,7 @@ Type behaviour(vector<int> b, vector<Type> delta, matrix<Type> A){
 
 //movement process
 template<class Type>
-vector<Type> movement(matrix<Type> x, vector<int> b, vector<Type> gamma, vector<Type> theta, matrix<Type> Sigma){
+Type movement(matrix<Type> x, vector<int> b, vector<Type> gamma, vector<Type> theta, matrix<Type> Sigma){
 
   density::MVNORM_t<Type> nllproc(Sigma);
   vector<Type> tmp(2);
@@ -39,12 +39,13 @@ vector<Type> movement(matrix<Type> x, vector<int> b, vector<Type> gamma, vector<
 
   }
 
-  return movenll;
+  Type rslt = movenll.sum();
+  return rslt;
 }
 
 // measurement process
 template<class Type>
-vector<Type> measurement(array<Type> y, matrix<Type> x, vector<int> idx, vector<Type> jidx, matrix<Type> ae, Type psi){
+Type measurement(array<Type> y, matrix<Type> x, vector<int> idx, vector<Type> jidx, matrix<Type> ae, Type psi){
 
   vector<Type> measnll(y.cols());
   vector<Type> xhat(2);
@@ -62,7 +63,8 @@ vector<Type> measurement(array<Type> y, matrix<Type> x, vector<int> idx, vector<
       measnll(i) -= (0.5*log(psi) - log(ae(i,2)) + dt(sqrt(psi)*tmp2(1)/ae(i,2),ae(i,3),true) ); // Latitude
   }
 
-  return measnll; // negative log-lik
+  Type rslt = measnll.sum();
+  return rslt; // negative log-lik
 }
 
 
@@ -187,7 +189,7 @@ vector<int> viterbi(int m, matrix<Type> x, vector<Type> delta, matrix<Type> A, a
 
 
 
-// just the pseudoresiduals 
+// just the pseudoresiduals
 template<class Type>
 matrix<Type> pseudoresids(matrix<Type> x, vector<Type> delta, matrix<Type> A, array<Type> P_array, array<Type> cdfslon, array<Type> cdfslat){
 

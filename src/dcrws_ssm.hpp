@@ -3,59 +3,55 @@
 
 using namespace density;
 
-template<class Type>
-struct track {
-  array<Type> y;
-  vector<int> b;
-  vector<int> idx;
-  vector<Type> jidx;
-  matrix<Type> ae;
-  track(SEXP x) {
-    y = tmbutils::asArray<Type>(getListElement(x, "y"));
-    b = asVector<int>(getListElement(x, "b"));
-    idx = asVector<int>(getListElement(x, "idx"));
-    jidx = asVector<Type>(getListElement(x, "jidx"));
-    ae = asMatrix<Type>(getListElement(x, "ae"));
-  }
-};
-
 
 template<class Type>
 Type dcrwSSM(objective_function<Type> * obj) {
 
-  // Input data
-  DATA_STRUCT(dat, track);
+  // data
+
+  // names of each track
+  vector<std::string> tracknames = StringList("tracknames",obj);
+  int ntracks = tracknames.size();
+  vector<track<Type> > tracks(ntracks); // vector< kind of element> name(size)
+
+  // tracks
+  for(int i = 0; i < ntracks; i++){
+    track<Type> indtrack(tracknames[i],obj);
+    tracks[i] = indtrack;
+  }
+
+
+
+  REPORT(ntracks);
+
+
+  // parameters
 
   // Input parameters - i.e. parameters to estimate.
   PARAMETER_VECTOR(working_theta);
-  PARAMETER_VECTOR(working_gamma); // First autocorrelation - logit because 0 < gamma < 1
-
-  PARAMETER(working_sigma_lon); // Process standard deviation in lon - log because sdlon > 0
-  PARAMETER(working_sigma_lat); // Process standard deviation in lat - log because sdlat > 0
-
-  PARAMETER_MATRIX(working_A); //matrix of switching probabilities
-
-  PARAMETER(working_psi); //working value for measurement error
-
-  PARAMETER_MATRIX(x);
-
-  // Transformation of the input parameters to model format
   vector<Type> theta(2);
   theta(0) = 2*M_PI/(1.0+exp(-working_theta(0))) - M_PI; // -pi to pi
   theta(1) = 2*M_PI/(1.0+exp(-working_theta(1))); // 0 to 2pi
-  //vector<Type> theta = 2*M_PI/(1.0+exp(-logitTheta1)) - M_PI; // -pi to pi
+  ADREPORT(theta);
 
-  // vector<Type> gamma = working_gamma; //1.0/(1.0+exp(-working_gamma));
-  //  vector<Type> gamma = 1.0/(1.0+exp(-working_gamma));
+  PARAMETER_VECTOR(working_gamma);
   vector<Type> gamma(2);
   gamma(0) = 1.0/(1.0+exp(-working_gamma(0)));
   gamma(1) = gamma(0)/(1.0+exp(-working_gamma(1)));
+  ADREPORT(gamma);
 
+  PARAMETER(working_sigma_lon);
   Type sigma_lon = exp(working_sigma_lon);
+  REPORT(sigma_lon);
+  PARAMETER(working_sigma_lat);
   Type sigma_lat = exp(working_sigma_lat);
-  Type psi = exp(working_psi);
+  REPORT(sigma_lat);
+  // Variance-covariance matrix for the process equation.
+  matrix<Type> Sigma(2,2);
+  Sigma << sigma_lon*sigma_lon, 0.0,
+  0.0, sigma_lat*sigma_lat;
 
-  //setting up the matrix of switching probabilities
+  PARAMETER_MATRIX(working_A); //matrix of switching probabilities
   int m = working_A.rows(); // number of states
   matrix<Type> A(m, m);
   for(int i = 0; i < m; ++i){
@@ -65,8 +61,8 @@ Type dcrwSSM(objective_function<Type> * obj) {
       A(i,m-1) = 1.0;
       A.row(i) *= 1.0/A.row(i).sum();
   }
-
-  // System of equations for finding stationary distribution:    'I - Gamma + 1'
+  ADREPORT(A);
+  // system of equations stat dist
   matrix<Type> system(m, m);
   for(int i=0; i<m; i++) {
       for(int j=0; j<m; j++) {
@@ -77,8 +73,7 @@ Type dcrwSSM(objective_function<Type> * obj) {
           }
       }
   }
-
-  // vector of ones for finding stationary distribution
+  // vector of ones for stat dist
   vector<Type> ones(m);
   for(int i=0; i<m; i++) {
       ones(i) = 1.0;
@@ -87,47 +82,50 @@ Type dcrwSSM(objective_function<Type> * obj) {
   matrix<Type> sys_inverse = system.inverse();
   vector<Type> delta = sys_inverse*ones;
 
-  // Report the parameters and their standard errors in their model format
-  REPORT(theta);
-  REPORT(gamma);
-  REPORT(sigma_lon);
-  REPORT(sigma_lat);
+  PARAMETER(working_psi); //working value for measurement error
+  Type psi = exp(working_psi);
   REPORT(psi);
-  REPORT(A);
-  ADREPORT(theta);
-  ADREPORT(gamma);
-  ADREPORT(sigma_lon);
-  ADREPORT(sigma_lat);
-  ADREPORT(psi);
-
-
-  // Variance-covariance matrix for the process equation.
-  matrix<Type> Sigma(2,2);
-  Sigma << sigma_lon*sigma_lon, 0.0,
-  0.0, sigma_lat*sigma_lat;
 
 
 
 
-   //////// likelihood
+
+   // likelihood calculations
 
   //Calculate logLikelihood
   Type nll = 0.0;
 
   // behaviour equation
-  Type behav = behaviour(dat.b, delta, A);
+  vector<Type> behav(ntracks);
+  Type tmpb = 0.0;
+  for(int i=0; i < ntracks; ++i){
+    tmpb = behaviour(tracks[i].b, delta, A);
+    behav(i) = tmpb;
+  }
   REPORT(behav);
-  nll -= behav;
+  nll -= behav.sum();
 
   // movement equation
-  vector<Type> movevec = movement(x, dat.b, gamma, theta, Sigma);
-  nll += movevec.sum();
-  REPORT(movevec);
+  Type tmpp = 0.0;
+  vector<Type> move(ntracks);
+  for(int i=0; i < ntracks; ++i){
+    tmpp = movement(tracks[i].x, tracks[i].b, gamma, theta, Sigma);
+    move(i) = tmpp;
+  }
+  REPORT(move);
+  nll += move.sum();
 
   // measurement equation
-  vector<Type> measvec = measurement(dat.y, x, dat.idx, dat.jidx, dat.ae, psi);
-  REPORT(measvec);
-  nll += measvec.sum();
+  Type tmpm = 0.0;
+  vector<Type> meas(ntracks);
+  for(int i=0; i < ntracks; ++i){
+    tmpm = measurement(tracks[i].y, tracks[i].x, tracks[i].idx, tracks[i].jidx, tracks[i].ae, psi);
+    meas(i) = tmpm;
+  }
+  REPORT(meas);
+  nll += meas.sum();
+
+  for(int i=0; i<ntracks; ++i) tracks[i].Rep(); 
 
   REPORT(nll);
   return nll;

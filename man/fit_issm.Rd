@@ -9,7 +9,7 @@ fit_issm(
   ts,
   p_start_hmm,
   init_psi,
-  res = c("x"),
+  res = "x",
   maxsteps = 10,
   fixsteps = FALSE,
   allowfc = FALSE,
@@ -21,7 +21,7 @@ fit_issm(
 )
 }
 \arguments{
-\item{obs}{the data}
+\item{obs}{the data: id, date (posix), lon, lat, ac}
 
 \item{ts}{the time step}
 
@@ -43,7 +43,7 @@ fit_issm(
 
 \item{allsilent}{if true, don't print the tmb tape for the hmm or ssm}
 
-\item{scaleobs}{value to scale the observations by (literally just divided), helpful if they are in eastings/northings}
+\item{scaleobs}{value to scale the observations by (literally just divided), helpful for convergence if they are in eastings/northings (set to 1000 to put track in km)}
 
 \item{...}{further arguments to fit_ssm}
 }

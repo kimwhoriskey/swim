@@ -148,7 +148,8 @@ fit_hmm <- function(dat,
                                    working_A=matrix(c(log(0.75/0.25), log(0.25/0.75)),ncol=1,nrow=2)),
                     silence=FALSE){
   
-  
+  # get track ids
+  tracknames <- tail(names(dat), -2)
   
   # create TMB object
   obj <- MakeADFun(dat, p_start, DLL='swim', silent=silence)
@@ -160,7 +161,10 @@ fit_hmm <- function(dat,
   nll <- obj$fn(opt$par)
   
   # extract behavioural states
-  b_states <- obj$report()$states
+  # states <- obj$report()$states
+  states <- list()
+  for(i in 1:length(tracknames)) states[[tracknames[i]]] <- obj$report()[[tracknames[i]]]$states
+
   
   # extract parameter estimates
   params_hmm <- summary(sdreport(obj))
@@ -169,10 +173,13 @@ fit_hmm <- function(dat,
   stationary <- obj$report()$delta
   
   # pseudoresiduals
+  pseudos <- list()
+  for(i in 1:length(tracknames)) pseudos[[tracknames[i]]] <- obj$report()[[tracknames[i]]]$pseudo
   
   # return results
   rslt <- list(mess = opt$mess, obj=obj, opt=opt, nll=nll, params = params_hmm, 
-               b_hat=b_states, statdist = stationary)
+               bhat=states, pseudos=pseudos, 
+               statdist = stationary)
   class(rslt) <- "swimhmm"
   return(rslt)
   
@@ -227,6 +234,11 @@ fit_ssm <- function(dat,
   
   #extract the names of the fixed variables
   fixed_names <- names(mapping)
+  # get the names of the tracks
+  tracknames <- tail(names(dat), -2)
+  # write the random effects
+  res <- paste(tracknames, '.', res, sep='')
+  
   
   # set up an error vector so that we can keep track of how many errors occur
   err_num = 0 # set initial error value at 0, base an iterative loop on this
@@ -277,20 +289,13 @@ fit_ssm <- function(dat,
   params_ssm <- srep[! rownames(srep) %in% res,] 
   
   # extract location state estimates
-  if(is.null(res)) res <- "nothing"
-  if((!unique(res %in% fixed_names))){ # in case the states are fixed
-    rehat = srep[rownames(srep) %in% res,]
-    if(unique(res=="x")){
-      xhat = data.frame(matrix(rehat[,1], nrow=nrow(rehat)/2, byrow=TRUE))
-      names(xhat) = c("lon", "lat")
-    } else {
-      ta = c(0, 0, obj$report()$ta)
-      sl = c(0, obj$report()$sl)
-      xhat <- data.frame(ta=ta, sl=sl)
-    }
-  } else {
+  if(is.null(res)){
     xhat=NULL
+  } else {
+    xhat <- list()
+    for(i in 1:length(tracknames)) xhat[[tracknames[i]]] <- obj$report()[[tracknames[i]]]$x
   }
+    
 
   rslt <- list(mess = opt$mess, obj=obj, opt=opt, nll=nll, 
                params=params_ssm, xhat=xhat)
@@ -347,7 +352,7 @@ get_parms <- function(prev_hmm, prev_ssm, curr_model){
 
 #' fit a switching ssm iteratively 
 #' @export
-#' @param obs the data
+#' @param obs the data: id, date (posix), lon, lat, ac
 #' @param ts the time step
 #' @param p_start_hmm starting values for the hmm step
 #' @param init_psi starting values for the measurement error parameter
@@ -358,13 +363,13 @@ get_parms <- function(prev_hmm, prev_ssm, curr_model){
 #' @param jiggle_fc how much random noise to add to the starting values of the parameters if the ssm falsely covnerges
 #' @param ssm_map mapping list for the ssm step
 #' @param allsilent if true, don't print the tmb tape for the hmm or ssm
-#' @param scaleobs value to scale the observations by (literally just divided), helpful if they are in eastings/northings
+#' @param scaleobs value to scale the observations by (literally just divided), helpful for convergence if they are in eastings/northings (set to 1000 to put track in km)
 #' @param ... further arguments to fit_ssm
 fit_issm <- function(obs, 
                      ts, 
                      p_start_hmm,
                      init_psi,
-                     res=c("x"),
+                     res="x",
                      maxsteps=10, fixsteps=FALSE, 
                      allowfc=FALSE, jiggle_fc=0.01, 
                      ssm_map=NULL,
@@ -419,15 +424,8 @@ fit_issm <- function(obs,
   if("sf" %in% class(obs)){
     obs <- obs %>% bind_cols(as_tibble(st_coordinates(obs))) %>% rename(lon=X, lat=Y) %>% as.data.frame() 
   }
-  
-  # if(scaleobs){
-  #   obsscale <- obs[1, c("lon", "lat")]
-  #   obs[,c("lon", "lat")] <- (obs[,c("lon", "lat")] - obsscale[rep(1, each=nrow(obs)),])/100000
-  # } else {
-  #   scaleobs <- 1
-  # }
   obs[,c("lon", "lat")] <- obs[,c("lon", "lat")]/scaleobs
-  # now it's in km
+
   
   # set up accumulators
   # all of the results from each step
@@ -443,18 +441,26 @@ fit_issm <- function(obs,
   # store the nll of the ssm, cue another while loop on this
   nll_ssm <- list()
   
-  # do everything else at the end using sapply instead
   
   #####################################################################
   ############ initial step, get intial location estimates ############
   #####################################################################
   
-  idxs <- getJidx(obs, ts = ts)
-  ae <- as.matrix(getAE(obs$ac))
+  splitobs <- split(obs, obs$id)
+  tracknames <- names(splitobs)
   
-  regobs <- regTrack(obs, ts=ts)
-  nx <- nrow(regobs$regx)
-  hmm_dat <- list(model=0, x=t(regobs$regx))
+  idxs <- lapply(splitobs, getJidx, ts = ts)
+  ae <- lapply(splitobs, function(x){as.matrix(getAE(x$ac))})
+  
+  regobsdat <- lapply(splitobs, function(x)regTrack(x, ts=ts))
+  regobs <- lapply(regobsdat, function(x)t(x$regx))
+  
+  hmm_dat <- list(model=0, 
+                  tracknames=as.list(tracknames))
+  for(i in 1:length(tracknames)){
+    hmm_dat[[tracknames[i]]]$x <- regobs[[tracknames[i]]]
+  }
+ 
 
 
   
@@ -479,11 +485,16 @@ fit_issm <- function(obs,
   
   # put together the data list for the model
   ssm_dat <- list(model=1,
-                  dat=list(y = t(array(c(obs$lon, obs$lat), dim=c(nrow(obs), 2))), 
-                           b = hmm_results[[1]]$b_hat-1,
-                           idx = idxs$idx, 
-                           jidx = idxs$jidx,
-                           ae=ae))
+                  tracknames=as.list(tracknames))
+  for(i in 1:length(tracknames)){
+    ssm_dat[[tracknames[i]]] <- list(y = t(array(c(splitobs[[tracknames[i]]]$lon, 
+                                                   splitobs[[tracknames[i]]]$lat), 
+                                                 dim=c(nrow(splitobs[[tracknames[i]]]), 2))),
+                                     b = hmm_results[[1]]$bhat[[tracknames[i]]]-1, 
+                                     idx = idxs[[tracknames[i]]]$idx, 
+                                     jidx = idxs[[tracknames[i]]]$jidx, 
+                                     ae = ae[[tracknames[i]]])
+  }
   # ssm_dat$ae = ae # options for either gaussian or t error? 
 
          
@@ -492,8 +503,10 @@ fit_issm <- function(obs,
                            prev_ssm = NULL,
                            curr_model = "ssm")
   p_start_ssm$working_psi <- log(init_psi)
-  p_start_ssm$x = matrix(log(1), nrow=2, ncol=nrow(regobs$regx)) #easy to start at 0
-
+  for(i in 1:length(tracknames)){
+    p_start_ssm[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[i]]]))
+  }
+  
   # fit the ssm
   # block for false convergence
   # the idea is to jiggle the starting parameters by adding a teeny bit of random error
@@ -537,6 +550,7 @@ fit_issm <- function(obs,
   } # close while loop
 
   
+  
   # update on where we are
   cat("\n ------------------------------------------------------------ \n finished SSM 1, convergence was:",
       ssm_results[[1]]$mess, 
@@ -559,7 +573,8 @@ fit_issm <- function(obs,
     
     
     ### add extra data input
-    hmm_dat <- list(model=0, x=t(ssm_results[[i-1]]$xhat))
+    for(j in 1:length(tracknames)) hmm_dat[[tracknames[j]]]$x = ssm_results[[i-1]]$xhat[[tracknames[j]]]
+    # hmm_dat <- list(model=0, x=t(ssm_results[[i-1]]$xhat))
   
     # fit HMM again
     p_start_hmm <- get_parms(prev_hmm = hmm_results[[i-1]], 
@@ -580,14 +595,16 @@ fit_issm <- function(obs,
     
     # update the data for the ssm, the only thing that changes is the behavioural states
     # taken from the most recent ssm
-    ssm_dat$dat$b = hmm_results[[i]]$b_hat-1
-    
+    # ssm_dat$b = hmm_results[[i]]$b_hat[[tracknames[i]]]-1
+    for(j in 1:length(tracknames)) ssm_dat[[tracknames[j]]]$b = hmm_results[[i]]$bhat[[tracknames[j]]]-1
+
     # get starting parameters for the ssm
     # starting values come from the most recent HMM, except for psi which comes from the last ssm
     p_start_ssm <- get_parms(prev_hmm = hmm_results[[i]], 
                              prev_ssm = ssm_results[[i-1]],
                              curr_model = "ssm")
-    
+    p_start_ssm$working_psi <- log(init_psi)
+    for(i in 1:length(tracknames)) p_start_ssm[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[i]]]))
     
     # block for false convergence, same deal as above
     fc_count[i]=0
@@ -661,15 +678,23 @@ fit_issm <- function(obs,
   
   # the best of the models based on proper convergence and minimum ssm nll
   winner = ssm_nll[ssm_nll$conv==0,'iter'][which.min(ssm_nll[ssm_nll$conv==0,'nll'])]
-  
-
+  if(length(winner)==0){
+    winner=1
+    warning("no winning iteration reached; setting winner to 1")
+  }
+  # new obs
+  newobs <- data.frame(id = rep(tracknames, times=sapply(regobsdat, function(x)nrow(x$regx))),
+                       date = do.call(c, lapply(regobsdat, function(x)x$xdates)),
+                       xhat = t(do.call(cbind, ssm_results[[winner]]$xhat)),
+                       bhat = do.call(c, hmm_results[[winner]]$bhat))
   
   # final results list
   rslts <- list(obs = obs, scaleobs=scaleobs, maxsteps = maxsteps, ts = ts, 
                 hmm_results = hmm_results, ssm_results = ssm_results, 
                 hmm_time = hmm_time, ssm_time = ssm_time,
                 hmm_nll = hmm_nll, ssm_nll = ssm_nll, 
-                fc_count = fc_count, winner = winner)
+                fc_count = fc_count, winner = winner,
+                newobs=newobs)
   class(rslts) <- "issm" 
   return(rslts)
   

@@ -16,9 +16,8 @@ regTrack <- function(dat, ts){
   regx <- as.data.frame(cbind(lon=approx(dat$date, dat$lon, xout = dates)$y,
                               lat=approx(dat$date, dat$lat, xout = dates)$y))
   #best guess of final state is final observation
-  #its fine, it's just for the first step anyways
   regx <- rbind(regx, dat[nrow(dat),c("lon", "lat")])
-  return(list(regx=regx, xdates=dates))
+  return(list(regx=regx, xdates=c(dates, tail(dat,1)$date)))
 }
 
 

@@ -1,5 +1,7 @@
 #include <TMB.hpp>
 #include <math.h>
+#include "extramacros.hpp"
+#include "trackstruct.hpp"
 #include "likelihoods.hpp"
 #include "dcrws_hmm.hpp"
 #include "dcrws_ssm.hpp"
