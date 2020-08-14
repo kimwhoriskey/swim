@@ -1,6 +1,12 @@
 
 ###############################     Data Functions     ###############################
 
+
+##################### Split up a track based on data gaps #####################
+
+
+
+
 ##################### Regularize a track by linear interpolation #####################
 
 #' regularize a track in time

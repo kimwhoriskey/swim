@@ -683,10 +683,13 @@ fit_issm <- function(obs,
     warning("no winning iteration reached; setting winner to 1")
   }
   # new obs
-  newobs <- data.frame(id = rep(tracknames, times=sapply(regobsdat, function(x)nrow(x$regx))),
-                       date = do.call(c, lapply(regobsdat, function(x)x$xdates)),
-                       xhat = t(do.call(cbind, ssm_results[[winner]]$xhat)),
-                       bhat = do.call(c, hmm_results[[winner]]$bhat))
+  xhat <- data.frame(t(do.call(cbind, ssm_results[[winner]]$xhat)))
+  names(xhat) <- c("lon", "lat")
+  preds <- data.frame(id = rep(tracknames, times=sapply(regobsdat, function(x)nrow(x$regx))),
+                      date = do.call(c, lapply(regobsdat, function(x)x$xdates)),
+                      lon = t(do.call(cbind, ssm_results[[winner]]$xhat))[,1],
+                      lat = t(do.call(cbind, ssm_results[[winner]]$xhat))[,2],
+                      bhat = do.call(c, hmm_results[[winner]]$bhat))
   
   # final results list
   rslts <- list(obs = obs, scaleobs=scaleobs, maxsteps = maxsteps, ts = ts, 
@@ -694,7 +697,7 @@ fit_issm <- function(obs,
                 hmm_time = hmm_time, ssm_time = ssm_time,
                 hmm_nll = hmm_nll, ssm_nll = ssm_nll, 
                 fc_count = fc_count, winner = winner,
-                newobs=newobs)
+                preds=preds)
   class(rslts) <- "issm" 
   return(rslts)
   

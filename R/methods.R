@@ -65,45 +65,27 @@ plot.issm <- function(mod, sim=NULL){
     ylab("Northing") +
     xlab("Easting") +
     geom_path(data=mod$obs, aes(x=lon, y=lat), col='grey') +
-    geom_path(data=as.data.frame(mod$ssm_results[[mod$winner]]$xhat), aes(x=lon, y=lat), col='black') +
-    geom_point(data=as.data.frame(mod$ssm_results[[mod$winner]]$xhat), aes(x=lon, y=lat, col=as.factor(mod$hmm_results[[mod$winner]]$b_hat))) +
+    geom_path(data=mod$preds, aes(x=lon, y=lat), col='black') +
+    geom_point(data=mod$preds, aes(x=lon, y=lat, col=as.factor(bhat))) +
     scale_color_manual(values=c(fmf[2], fmf[3])) +
     guides(colour=guide_legend(title="b state")) +
     ggtitle("Predicted Path and Predicted States") +
     theme_bw()
   
   # take the residuals, gotta get rid of the rows with Inf
-  # get rid of the first one, CHECK THIS LATER
-  pseudo <- as.data.frame(mod$hmm_results[[mod$winner]]$obj$report()$pseudo)[-1,]
-  names(pseudo) <- c("lon", "lat")
-  pseudo <- pseudo[is.finite(rowSums(pseudo)),]
-  
-  # plot the residuals
-  linetmp <- get_qqline(pseudo[,1]) # get qqline parameters
-  xresidplot <- ggplot(data=pseudo, aes(sample=lon)) +
-    geom_qq() +
-    geom_abline(slope=linetmp[1], intercept=linetmp[2], col=fmf[4]) + 
-    ggtitle("X Coordinate Residuals") +
-    theme_bw()
-  
-  linetmp <- get_qqline(pseudo[,2])
-  yresidplot <- ggplot(data=pseudo, aes(sample=lat)) +
-    geom_qq() +
-    geom_abline(slope=linetmp[1], intercept=linetmp[2], col=fmf[4]) +
-    ggtitle("Y Coordinate Residuals") +
-    theme_bw()
+  qqplots <- plotqq(mod)
   
   # put it all together
   if(is.null(sim)){
-    grid.arrange(bplot,
-                 xresidplot, yresidplot,
+    gridExtra::grid.arrange(bplot,
+                 qqplots$xqqplot, qqplots$yqqplot,
                  widths=c(2,1),
                  layout_matrix=rbind(c(1,2),
                                      c(1,3)),
                  top = paste("winning iteration =", mod$winner))
   } else {
-    grid.arrange(lplot, bplot,
-                 xresidplot, yresidplot,
+    gridExtra::grid.arrange(lplot, bplot,
+                 qqplots$xqqplot, qqplots$yqqplot,
                  widths=c(2,1),
                  layout_matrix=rbind(c(1,3),
                                      c(2,4)),
@@ -117,22 +99,27 @@ plotqq <- function(mod){
   
   fmf <- wesanderson::wes_palette("FantasticFox1", type = "discrete")
   
-  pseudo <- as.data.frame(mod$hmm_results[[mod$winner]]$obj$report()$pseudo)[-1,]
+  pseudo <- as.data.frame(do.call(rbind, mod$hmm_results[[mod$winner]]$pseudos))
   names(pseudo) <- c("lon", "lat")
-  pseudo <- pseudo[is.finite(rowSums(pseudo)),]
+  if(length(which(is.infinite(rowSums(pseudo))))>0){
+    warning("infinite pseudo values detected at ", 
+            paste(which(is.infinite(rowSums(pseudo))), collapse=","),
+            " and were removed")
+    pseudo <- pseudo[is.finite(rowSums(pseudo)),]
+  } 
   
   linetmp <- get_qqline(pseudo[,1]) # get qqline parameters
   xresidplot <- ggplot(data=pseudo, aes(sample=lon)) +
     geom_qq() +
     geom_abline(slope=linetmp[1], intercept=linetmp[2], col=fmf[4]) + 
-    # ggtitle("X Coordinate Residuals") +
+    ggtitle("X Coordinate Residuals") +
     theme_bw() #+ theme(axis.title.x=element_blank(), axis.title.y=element_blank()) 
-  
+
   linetmp <- get_qqline(pseudo[,2])
   yresidplot <- ggplot(data=pseudo, aes(sample=lat)) +
     geom_qq() +
     geom_abline(slope=linetmp[1], intercept=linetmp[2], col=fmf[4]) +
-    # ggtitle("Y Coordinate Residuals") +
+    ggtitle("Y Coordinate Residuals") +
     theme_bw() #+ theme(axis.title.x=element_blank(), axis.title.y=element_blank()) 
   
   rslt <- list(xqqplot=xresidplot, yqqplot=yresidplot)
