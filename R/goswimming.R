@@ -535,9 +535,9 @@ fit_issm <- function(obs,
                                                              p_start = p_start_ssm,
                                                              res=res,
                                                              mapping = ssm_map,
-                                                             # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                             silence=allsilent,
-                                                             ...))
+                                                             inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                             silence=allsilent))#,
+                                                             #...))
       # save the nll 
       nll_ssm[[1]] = ssm_results[[1]]$nll
       # save the new convergence, cue on this
@@ -604,7 +604,7 @@ fit_issm <- function(obs,
                              prev_ssm = ssm_results[[i-1]],
                              curr_model = "ssm")
     p_start_ssm$working_psi <- log(init_psi)
-    for(i in 1:length(tracknames)) p_start_ssm[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[i]]]))
+    for(j in 1:length(tracknames)) p_start_ssm[[paste(tracknames[j], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[j]]]))
     
     # block for false convergence, same deal as above
     fc_count[i]=0
@@ -625,9 +625,9 @@ fit_issm <- function(obs,
                                                                p_start = p_start_ssm,
                                                                res=res,
                                                                mapping = ssm_map,
-                                                               # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                               silence=allsilent,
-                                                               ...))
+                                                               inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                               silence=allsilent))#,
+                                                               #...))
         # save the nll 
       nll_ssm[[i]] = ssm_results[[i]]$nll
       # save the new convergence, cue on this
