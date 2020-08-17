@@ -3,7 +3,17 @@
 
 
 ##################### Split up a track based on data gaps #####################
-
+#' split a track for a single individual based on temporal gaps
+#' @export
+#' @param dat the data, must have a date column in posix
+#' @param the cutoff gap time in hours. Any gaps larger than this will force the track to be split. 
+splitTrack <- function(dat, cutoff=24){
+  timediff <- diff(as.numeric(dat$date))
+  idx <- which(timediff > cutoff*3600)
+  suffixes <- rep(seq(length(idx)+1), times=diff(c(0, idx, nrow(dat))))
+  dat$tracknames <- paste("track", suffixes, sep='')
+  return(dat)
+}
 
 
 
