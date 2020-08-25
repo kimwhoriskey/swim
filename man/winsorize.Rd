@@ -4,27 +4,12 @@
 \alias{winsorize}
 \title{Winsorize some observations}
 \usage{
-winsorize(
-  obs,
-  speedtol = 10,
-  inflate = 10,
-  upperlimscale = 1.5,
-  proj = FALSE,
-  returnfull = FALSE
-)
+winsorize(obs, inflate = 1)
 }
 \arguments{
 \item{obs}{dataframe of observations, 'id', date', 'lon', 'lat', 'lc'}
 
-\item{speedtol}{the speed tolerance for the animal. If "empirical" this is set to}
-
-\item{inflate}{the multiplicative inflation for the speedtol}
-
-\item{upperlimscale}{the threshold value determining how far back the outliers should be scaled, = upperlimscale*IQR}
-
-\item{proj}{are the data projected}
-
-\item{returnfull}{return the index of the outliers as well as the winsorized data?}
+\item{inflate}{an inflation factor for the winsorizing cut off value}
 }
 \description{
 Winsorize some observations

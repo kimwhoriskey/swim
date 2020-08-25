@@ -9,96 +9,73 @@
 
 #' Winsorize some observations
 #' @param obs dataframe of observations, 'id', date', 'lon', 'lat', 'lc'
-#' @param speedtol the speed tolerance for the animal. If "empirical" this is set to 
-#' @param inflate the multiplicative inflation for the speedtol
-#' @param upperlimscale the threshold value determining how far back the outliers should be scaled, = upperlimscale*IQR
-#' @param proj are the data projected
-#' @param returnfull return the index of the outliers as well as the winsorized data? 
+#' @param inflate an inflation factor for the winsorizing cut off value
 #' @export
-winsorize <- function(obs, speedtol=10, inflate=10, upperlimscale=1.5, proj=FALSE, returnfull=FALSE){
- 
+winsorize <- function(obs, inflate=1){
+  
+  #get indices where the tracks start
+  trackstartidx <- c(1, head(cumsum(rle(obs$trackid)$lengths), -1) +1)
+  
   # generate new observation data frame
   newobs <- obs
   
-  # find the outliers based on the speed
   # step lengths first, units m
-  if(proj){
-    empty <- st_as_sfc("POINT(EMPTY)")
-    sl <- c(0, head(st_distance(obs$geometry, lead(obs$geometry, default=empty), by_element=TRUE), -1))
+  if("sf" %in% class(obs)){
+    empty <- st_as_sfc("POINT(EMPTY)", crs=st_crs(obs))
+    d <- c(0, head(st_distance(obs$geometry, lead(obs$geometry, default=empty), by_element=TRUE), -1))
   } else {
-    sl <- getStepLengths(as.matrix(obs[,c("lon", "lat")]), convert_to_rad=FALSE, units="m")
+    d <- c(0, argosfilter::distanceTrack(obs$lat, obs$lon))*1000
+    # d <- getStepLengths(as.matrix(obs[,c("lon", "lat")]), convert_to_rad=TRUE, units="m")
   }
   # now divide by the time to get speed, units m/s
-  if("date" %in% names(obs)){
-    secs <- c(1, as.numeric(diff(obs$date)))
-    if(any(secs==0)) warning("there are multiple observations for some datetime stamps")
-    # secs[which(secs==0)] <- 1 # set to one second if it's 0 seconds
-    sl <- sl/secs 
-  } 
-  
+  secs <- c(1, as.numeric(diff(obs$date)))
+  if(any(secs==0)) warning("there are multiple observations for some datetime stamps")
+  sp <- d/secs 
+
   # get the quantile stats
-  bs <- boxplot.stats(sl)
+  # remove the values corresponding to the temporal gaps
+  # do this for each lc class
+  if(length(trackstartidx)>1){
+    speedstats <- tapply(sp[-trackstartidx[-1]], function(x)boxplot.stats(x)$stats, INDEX=obs[-trackstartidx[-1],]$lc)
+  } else {
+    speedstats <- tapply(sp, function(x)boxplot.stats(x)$stats, INDEX=obs$lc, simplify=FALSE)
+  }
+ 
   # set an upperlimit to the step length value that we want to scale by
   # default is 1.5*IQR
-  upperlim <- bs$stats[4] + upperlimscale*(bs$stats[4]-bs$stats[2])
-  # can set to an empirical value or a pre-determined value based on swim speed
-  if(speedtol == "empirical"){
-    tol = upperlim
-  } else {
-    tol = speedtol*inflate
-  }
-  outidx <- which(sl > tol) 
+  upperlim <- lapply(speedstats, function(x){x[4] + inflate*1.5*(x[4]-x[2])})
   
-  # first figure out if the first location is an outlier
-  # if so, remove it entirely
-  # not sure if it is worth bringing it closer to the second location
-  # also have to create an offset value for the indices for newobs
-  offset <- 0 
-  if(2 %in% outidx){ # need to have an and condition here in case the second one is really the outlier
-    newobs <- newobs[-1,] 
-    outidx <- outidx[-1] #should be the first element of outidx, hopefully this doesn't bite me in the butt
-    cat("\n the first location of seal", as.character(newobs$id[1]), "was an outlier and was removed completely \n")
-    offset <- 1
+  outidx <- which(obs$outliers==TRUE)
+  
+  # remove any values that correspond to data gaps
+  if(any(outidx %in% trackstartidx)){
+    outidx <- outidx[-which(outidx %in% trackstartidx)]
   }
- 
-  # this part is tricky, basically every single outlier based on step length will have a partner outlier
-  # so basically what we are doing is finding all of the pairs of outliers
-  # this pairs assumption is sometimes violated
-  # in that case tho, you can run the windsorize code multiple times (jsut run it on output of the 
-  # windsorize function), and it should work
-  diffs <- diff(outidx)
-  runs <- rle(diffs)
-  runsidx <- which( (runs$values==1) & (runs$lengths>1) )
-  runslen <- runs$lengths[runsidx]
-  rmfromdups <- numeric()
-  if(length(runslen)>0){ # condition on there being sets of outliers occuring one after the other
-    for(i in 1:length(runsidx)){
-      # keep the odd values, which are actual outliers, ditch the events which are pairs
-      odds = seq(1, runslen[i], 2) 
-      rmfromdups <- append(rmfromdups, cumsum(runs$lengths)[runsidx[i]-1] + odds)
-    }
-  }
- 
-  dupidx <- setdiff(which(diff(outidx)==1) + 1, rmfromdups) 
-  # finally, remove the duplicated outliers from the original outlying index
-  outidx <- outidx[-dupidx]
+  
+  # remove any outliers where the observed speed is less than 1.5xIQR
+  # because that would pull the observed locations AWAY from the true i believe
+  outidx <- outidx[as.numeric(upperlim[obs[outidx,]$lc]) < sp[outidx]]
+
+  # throw a warning if the starting value of a track segment might be an outlier
+  if(any(outidx %in% (trackstartidx+1))) warning(paste(obs$id[1], obs$trackid[outidx[outidx %in% (trackstartidx+1)]], "might start with an outlying location"))
+  if(any(which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1))) warning(paste(obs$id[1], obs$trackid[which(sp>max(as.numeric(upperlim)))[which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1)]], "might start with an outlying location"))
+  
+  
   
   # calculate the speed ratio based on the upperlim
-  dr <- upperlim/sl[outidx] 
+  # basically this is a proportion of how much we should scale an observation back, based on speed
+  dr <- as.numeric(upperlim[obs[outidx,]$lc])/sp[outidx] 
   
   # replace outliers
   # basically its a projection of the vector onto itself, just scaling it back a bit
   # so this will technically affect the turning angles of the next two locations
-  # include the offset variable because the indices of newobs are one less than the indices
-  # of obs if we have removed the first location
-  # this should only kick in if you've removed the first location
   if(length(outidx) > 0 ){
       
-    if(proj){
+    if("sf" %in% class(obs)){
         coos <- st_coordinates(newobs)
         newcoos <- coos
       for(i in 1:length(outidx)){
-        newcoos[outidx[i] - offset, c("X", "Y")] <- coos[outidx[i]-1, c("X", "Y")] + 
+        newcoos[outidx[i], c("X", "Y")] <- coos[outidx[i]-1, c("X", "Y")] + 
           dr[i]*(coos[outidx[i], c("X", "Y")] - coos[outidx[i]-1, c("X", "Y")])
       }
       st_geometry(newobs) <- st_geometry(st_as_sf(data.frame(newcoos), 
@@ -107,7 +84,7 @@ winsorize <- function(obs, speedtol=10, inflate=10, upperlimscale=1.5, proj=FALS
     } else {
       if(length(outidx) > 0 ){
         for(i in 1:length(outidx)){
-          newobs[outidx[i] - offset, c("lon", "lat")] <- obs[outidx[i]-1, c("lon", "lat")] + 
+          newobs[outidx[i], c("lon", "lat")] <- obs[outidx[i]-1, c("lon", "lat")] + 
             dr[i]*(obs[outidx[i], c("lon", "lat")] - obs[outidx[i]-1, c("lon", "lat")])
         }
       }
@@ -120,13 +97,21 @@ winsorize <- function(obs, speedtol=10, inflate=10, upperlimscale=1.5, proj=FALS
     cat(" \n seal", as.character(newobs$id[1]), "does not have any outliers as you have defined them \n")
   }
 
-  # return object
-  if(returnfull){
-    return(list(outliers=outidx, obs=newobs))
+  # add a column for the locations that were winsorized
+  newobs$winsorized <- FALSE
+  newobs[outidx, "winsorized"] <- TRUE
+  # add the old locations in
+  if("sf" %in% class(obs)){
+    newobs$oldx <- st_coordinates(obs)[,1]
+    newobs$oldy <- st_coordinates(obs)[,2]
   } else {
-    return(newobs)
-    
+    newobs$oldlon <- obs$lon
+    newobs$oldlat <- obs$lat
   }
+  
+  # return object
+  return(newobs)
+  
 }
 
 
@@ -446,7 +431,7 @@ fit_issm <- function(obs,
   ############ initial step, get intial location estimates ############
   #####################################################################
   
-  splitobs <- split(obs, obs$id)
+  splitobs <- split(obs, obs$trackid)
   tracknames <- names(splitobs)
   
   idxs <- lapply(splitobs, getJidx, ts = ts)
