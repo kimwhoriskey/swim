@@ -57,8 +57,8 @@ winsorize <- function(obs, inflate=1){
   outidx <- outidx[as.numeric(upperlim[obs[outidx,]$lc]) < sp[outidx]]
 
   # throw a warning if the starting value of a track segment might be an outlier
-  if(any(outidx %in% (trackstartidx+1))) warning(paste(obs$id[1], obs$trackid[outidx[outidx %in% (trackstartidx+1)]], "might start with an outlying location"))
-  if(any(which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1))) warning(paste(obs$id[1], obs$trackid[which(sp>max(as.numeric(upperlim)))[which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1)]], "might start with an outlying location"))
+  if(any(outidx %in% (trackstartidx+1))) print(paste(obs$id[1], obs$trackid[outidx[outidx %in% (trackstartidx+1)]], "might start with an outlying location"))
+  if(any(which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1))) print(paste(obs$id[1], obs$trackid[which(sp>max(as.numeric(upperlim)))[which(sp>max(as.numeric(upperlim))) %in% (trackstartidx+1)]], "might start with an outlying location"))
   
   
   
@@ -435,7 +435,7 @@ fit_issm <- function(obs,
   tracknames <- names(splitobs)
   
   idxs <- lapply(splitobs, getJidx, ts = ts)
-  ae <- lapply(splitobs, function(x){as.matrix(getAE(x$ac))})
+  ae <- lapply(splitobs, function(x){as.matrix(getAE(x$lc))})
   
   regobsdat <- lapply(splitobs, function(x)regTrack(x, ts=ts))
   regobs <- lapply(regobsdat, function(x)t(x$regx))
@@ -499,7 +499,7 @@ fit_issm <- function(obs,
   # if we fix all of the ssm parameters this may basically be moot
   # also count the numbers of false convergence so that we know, also so that we can cut off the optimizer
   ssm_fixed_names <- names(ssm_map) # record the names of the fixed parameters
-  pidx <- which(!names(p_start_ssm) %in%  c("x", "sl", "ta", ssm_fixed_names)) #create an index to loop over, p for parameter
+  pidx <- which(!names(p_start_ssm) %in%  c("x", ssm_fixed_names)) #create an index to loop over, p for parameter
   # use a while loop acting on whether we allow fc and what the count of the false convergence is
   fc_count[1]=0
   ssm_conv[[1]]=0 #set it to 1 to initialize the loop
@@ -520,9 +520,9 @@ fit_issm <- function(obs,
                                                              p_start = p_start_ssm,
                                                              res=res,
                                                              mapping = ssm_map,
-                                                             # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                             silence=allsilent,
-                                                             ...))
+                                                             inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                             silence=allsilent))#,
+                                                             #...))
       # save the nll 
       nll_ssm[[1]] = ssm_results[[1]]$nll
       # save the new convergence, cue on this
@@ -610,9 +610,9 @@ fit_issm <- function(obs,
                                                                p_start = p_start_ssm,
                                                                res=res,
                                                                mapping = ssm_map,
-                                                               # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                               silence=allsilent,
-                                                               ...))
+                                                               inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+                                                               silence=allsilent))#,
+                                                               #...))
         # save the nll 
       nll_ssm[[i]] = ssm_results[[i]]$nll
       # save the new convergence, cue on this
@@ -689,33 +689,48 @@ fit_issm <- function(obs,
 }
 
 
-#' mmm not sure about this one yet
-runSimStudy <- function(startseed, nsims, nsteps, path, ...){
+#
+
+
+
+####### bootstrap the errors
+bootstrapCI <- function(mod, 
+                        startseed=42, 
+                        nsamples=50, 
+                        nsteps=20, 
+                        savepath, 
+                        ...){
   
+  # get everything from the mod
+  theta <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'theta', 'Estimate']
+  gamma <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'gamma', 'Estimate']
+  sdx <- mod$hmm_results[[mod$winner]]$params[c('tau_lon', 'tau_lat'), 'Estimate']
+  alpha <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'A', 'Estimate']
+  psi <- mod$ssm_results[[mod$winner]]$params['psi', 'Estimate']
+  
+  # initialize
   sims <- list()
   mods <- list()
   
-  for(i in 1:nsims){
+  for(i in 1:nsamples){
     
     seed = startseed-1+i
     
     # need to generalize this
     sims[[i]] <- genTrack(n_x=644,
                     n_y=1314,
-                    process_pars = list(theta = c(0.0132, 0.9345),
-                                        gamma = c(0.9433,0.2045),
-                                        sdx = c(0.0272, 0.0235)),
-                    move="dcrw", 
+                    process_pars = list(theta = theta,
+                                        gamma = gamma,
+                                        sdx = sdx),
                     start_seed=seed, 
-                    alpha=matrix(c(0.6952, 0.3048, 0.3322, 0.6678), nrow=2, byrow=TRUE),
+                    alpha=matrix(alpha, nrow=sqrt(length(alpha))),
                     me="t", 
-                    psi=0.5531)
+                    psi=psi)
 
     
     #maybe try 10 and 13
     
-    mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
-                                    move = "dcrw",
+    mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs %>% mutate(trackid="track1"),
                                     ts = 3,
                                     p_start_hmm = list(working_theta = c(log(1), log(1)),
                                                        working_gamma = c(log(1), log(1)),
@@ -723,18 +738,16 @@ runSimStudy <- function(startseed, nsims, nsteps, path, ...){
                                                        working_A=matrix(c(log(0.75/0.25), log(0.25/0.75)),ncol=1,nrow=2)),
                                     init_psi = 1,
                                     res = c("x"),
-                                    maxsteps = 20,
+                                    maxsteps = nsteps,
                                     fixsteps = TRUE,
                                     allowfc=FALSE,
                                     jiggle_fc=0.01,
-                                    transform_random_effects=0,
-                                    split=FALSE,
-                                    allsilent=FALSE,
+                                    allsilent=TRUE,
                                     ssm_map <- list(working_gamma = factor(c(NA, NA)),
                                                     working_theta = factor(c(NA, NA)),
                                                     working_sigma_lon=factor(NA), working_sigma_lat=factor(NA)))})
     # save it
-    save(mods, file=path)
+    # save(mods, file=path)
     # 
     # update on where we are in the iteration
     cat("\n ------------------------------------------------------------ \n finished sim study", i, 
@@ -742,7 +755,30 @@ runSimStudy <- function(startseed, nsims, nsteps, path, ...){
     
   }
   
-  return(list(sims=sims, mods=mods))
+  nullidx <- which(sapply(mods, length)==1)  
+  for(i in 1:length(nullidx)) mods[[nullidx[i]+1-i]] <- NULL
+  
+  m <- length(which(row.names(mod$hmm_results[[mod$winner]]$params) == "theta"))
+  pars <- rbind(sapply(mods, function(x)x$hmm_results[[x$winner]]$params[row.names(x$hmm_results[[x$winner]]$params) %in% 'theta', 'Estimate']),
+  sapply(mods, function(x)x$hmm_results[[x$winner]]$params[row.names(x$hmm_results[[x$winner]]$params) %in% 'gamma', 'Estimate']),
+  sapply(mods, function(x)x$hmm_results[[x$winner]]$params['tau_lon', 'Estimate']),
+  sapply(mods, function(x)x$hmm_results[[x$winner]]$params['tau_lat', 'Estimate']),
+  sapply(mods, function(x)x$hmm_results[[x$winner]]$params[row.names(x$hmm_results[[x$winner]]$params) %in% 'A', 'Estimate']),
+  sapply(mods, function(x)x$ssm_results[[x$winner]]$params['psi', 'Estimate'])
+  ) %>% as.data.frame() 
+  
+  parstats <- pars %>% 
+    mutate(mean = rowMeans(.)) %>% 
+    mutate(median = apply(., 1, median)) %>% 
+    mutate(sd = apply(., 1, sd)) %>% 
+    mutate(lower2.5 = apply(., 1, quantile, probs=0.025)) %>% 
+    mutate(upper975 = apply(., 1, quantile, probs=0.975)) %>% 
+    mutate(par=c(rep("theta", m), rep("gamma", m), "sigma_lon", "sigma_lat", rep("A", m*m), "psi")) %>% 
+    select(par, mean, median, sd, lower2.5, upper975)
+  
+  #calculate the behavioural state error rate and the std. dev. of the xhat
+  
+  return(list(sims=sims, mods=mods, pars=pars, parstats=parstats))
   
 }
 

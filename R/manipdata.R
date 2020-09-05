@@ -31,10 +31,10 @@ regTrack <- function(dat, ts){
   dates = seq(t0, tT, by=delta) #all the time values for interpolation
   regx <- as.data.frame(cbind(lon=approx(dat$date, dat$lon, xout = dates)$y,
                               lat=approx(dat$date, dat$lat, xout = dates)$y))
-  #best guess of final state is final observation
-  # regx <- rbind(regx, dat[nrow(dat),c("lon", "lat")])
+  #best guess of final state is final observation, only needed for first step anyways
+  regx <- rbind(regx, dat[nrow(dat),c("lon", "lat")])
   # return(list(regx=regx, xdates=c(dates, tail(dat,1)$date)))
-  return(list(regx=regx, xdates=dates))
+  return(list(regx=regx, xdates=c(dates, tT+delta)))
 }
 
 

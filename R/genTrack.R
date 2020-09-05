@@ -106,7 +106,7 @@ genTrack <- function(n_x=500, n_y=1500,
   for(i in 2:n_y) date_y = append(date_y, (jidx[i,2]) * 3600 * 3 + date_x[jidx[i,1]-1])
   
   obs <- data.frame(date=date_y, lon=Y[,1], lat=Y[,2])
-  if(me=='t') obs$ac = ac
+  if(me=='t') obs$lc = ac
   
   rslt <- list(b=b, X=X, Y=Y, jidx=jidx,
                  date_x=date_x, date_y=date_y, obs=obs)

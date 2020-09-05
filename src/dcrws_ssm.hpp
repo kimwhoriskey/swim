@@ -42,10 +42,10 @@ Type dcrwSSM(objective_function<Type> * obj) {
 
   PARAMETER(working_sigma_lon);
   Type sigma_lon = exp(working_sigma_lon);
-  REPORT(sigma_lon);
+  ADREPORT(sigma_lon);
   PARAMETER(working_sigma_lat);
   Type sigma_lat = exp(working_sigma_lat);
-  REPORT(sigma_lat);
+  ADREPORT(sigma_lat);
   // Variance-covariance matrix for the process equation.
   matrix<Type> Sigma(2,2);
   Sigma << sigma_lon*sigma_lon, 0.0,
@@ -84,7 +84,7 @@ Type dcrwSSM(objective_function<Type> * obj) {
 
   PARAMETER(working_psi); //working value for measurement error
   Type psi = exp(working_psi);
-  REPORT(psi);
+  ADREPORT(psi);
 
 
 
@@ -125,7 +125,7 @@ Type dcrwSSM(objective_function<Type> * obj) {
   REPORT(meas);
   nll += meas.sum();
 
-  for(int i=0; i<ntracks; ++i) tracks[i].Rep(); 
+  for(int i=0; i<ntracks; ++i) tracks[i].Rep();
 
   REPORT(nll);
   return nll;

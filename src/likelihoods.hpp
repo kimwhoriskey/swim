@@ -58,7 +58,7 @@ Type measurement(array<Type> y, matrix<Type> x, vector<int> idx, vector<Type> ji
       tmp2 = tmp-xhat;
       // nll += nll_meas(tmp-xhat); //MVNORM_t returns the negative log likelihood
       // taken from Marie's DCRW_Argos.cpp file
-      // based on this pretty sure dt returns the log likelihood
+      // dt returns the log likelihood
       measnll(i) = -(0.5*log(psi) - log(ae(i,0)) + dt(sqrt(psi)*tmp2(0)/ae(i,0),ae(i,1),true) ); // Longitude
       measnll(i) -= (0.5*log(psi) - log(ae(i,2)) + dt(sqrt(psi)*tmp2(1)/ae(i,2),ae(i,3),true) ); // Latitude
   }
