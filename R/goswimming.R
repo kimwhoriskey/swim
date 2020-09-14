@@ -677,7 +677,7 @@ fit_issm <- function(obs,
                       bhat = do.call(c, hmm_results[[winner]]$bhat))
   
   # final results list
-  rslts <- list(obs = obs, scaleobs=scaleobs, maxsteps = maxsteps, ts = ts, 
+  rslts <- list(obs=obs, idxs=idxs, scaleobs=scaleobs, maxsteps=maxsteps, ts=ts, 
                 hmm_results = hmm_results, ssm_results = ssm_results, 
                 hmm_time = hmm_time, ssm_time = ssm_time,
                 hmm_nll = hmm_nll, ssm_nll = ssm_nll, 
@@ -698,15 +698,50 @@ bootstrapCI <- function(mod,
                         startseed=42, 
                         nsamples=50, 
                         nsteps=20, 
-                        savepath, 
+                        savepath=NULL, 
+                        setREs=FALSE,
+                        setjidx=TRUE,
+                        setlc=TRUE,
                         ...){
   
   # get everything from the mod
+  nx <- nrow(mod$preds)
+  ny <- nrow(mod$obs)
+  acprob <- table(mod$obs$lc)
   theta <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'theta', 'Estimate']
   gamma <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'gamma', 'Estimate']
   sdx <- mod$hmm_results[[mod$winner]]$params[c('tau_lon', 'tau_lat'), 'Estimate']
   alpha <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'A', 'Estimate']
   psi <- mod$ssm_results[[mod$winner]]$params['psi', 'Estimate']
+  
+  if(setREs){
+    res <- list(b=mod$preds$b,
+                x=as.matrix(mod$preds[,c("lon", 'lat')]))
+  } else {
+    res <- list(b=NULL,
+                x=NULL)
+  }
+  
+  if(setjidx){
+    tracknames <- unique(mod$obs$trackid)
+    trackstartidx <- cumsum(table(mod$obs$trackid))
+    jidx <- data.frame(idx=mod$idxs[[tracknames[1]]]$idx, ji=mod$idxs[[tracknames[1]]]$jidx)
+    for(i in 2:length(tracknames)){
+      jidx <- rbind(jidx,data.frame(idx=jidx[trackstartidx[i-1], 1] + mod$idxs[[tracknames[i]]]$idx, ji=mod$idxs[[tracknames[i]]]$jidx))
+    }
+    trackid <- mod$obs$trackid
+    obsdates <- mod$obs$date
+  } else {
+    jidx <- NULL
+    trackid <- NULL
+    obsdates <- NULL
+  }
+  
+  if(setlc){
+    lc <- mod$obs$lc
+  } else {
+    lc <- NULL
+  }
   
   # initialize
   sims <- list()
@@ -717,38 +752,48 @@ bootstrapCI <- function(mod,
     seed = startseed-1+i
     
     # need to generalize this
-    sims[[i]] <- genTrack(n_x=644,
-                    n_y=1314,
-                    process_pars = list(theta = theta,
-                                        gamma = gamma,
-                                        sdx = sdx),
-                    start_seed=seed, 
-                    alpha=matrix(alpha, nrow=sqrt(length(alpha))),
-                    me="t", 
-                    psi=psi)
+    sims[[i]] <- genTrack(nx=nx,
+                          ny=ny,
+                          process_pars = list(theta = theta,
+                                              gamma = gamma,
+                                              sdx = sdx),
+                          start_seed=seed, 
+                          alpha=matrix(alpha, nrow=sqrt(length(alpha))),
+                          me="t", 
+                          psi=psi,
+                          acprob=acprob,
+                          res=res, 
+                          jidx=jidx,
+                          lc=lc,
+                          trackid=trackid,
+                          obsdates=obsdates
+                          )
 
     
-    #maybe try 10 and 13
-    
-    mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs %>% mutate(trackid="track1"),
-                                    ts = 3,
-                                    p_start_hmm = list(working_theta = c(log(1), log(1)),
-                                                       working_gamma = c(log(1), log(1)),
-                                                       working_tau_lon=log(1), working_tau_lat=log(1),
-                                                       working_A=matrix(c(log(0.75/0.25), log(0.25/0.75)),ncol=1,nrow=2)),
-                                    init_psi = 1,
-                                    res = c("x"),
+    mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
+                                    ts = mod$ts,
                                     maxsteps = nsteps,
-                                    fixsteps = TRUE,
-                                    allowfc=FALSE,
-                                    jiggle_fc=0.01,
-                                    allsilent=TRUE,
-                                    ssm_map <- list(working_gamma = factor(c(NA, NA)),
-                                                    working_theta = factor(c(NA, NA)),
-                                                    working_sigma_lon=factor(NA), working_sigma_lat=factor(NA)))})
+                                    ...)})
+    # mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
+    #                                 ts = mod$ts,
+    #                                 maxsteps = nsteps,
+    #                                 p_start_hmm = list(working_theta = c(log(1), log(1)),
+    #                                                    working_gamma = c(log(1), log(1)),
+    #                                                    working_tau_lon=log(1), working_tau_lat=log(1),
+    #                                                    working_A=matrix(c(log(0.75/0.25), log(0.25/0.75)),ncol=1,nrow=2)),
+    #                                 init_psi = 1,
+    #                                 res = c("x"),
+    #                                 fixsteps = TRUE,
+    #                                 allowfc=TRUE,
+    #                                 jiggle_fc=0.01,
+    #                                 allsilent=TRUE,
+    #                                 ssm_map <- list(working_gamma = factor(c(NA, NA)),
+    #                                                 working_theta = factor(c(NA, NA)),
+    #                                                 working_sigma_lon=factor(NA), working_sigma_lat=factor(NA)))})
+    
     # save it
-    # save(mods, file=path)
-    # 
+    if(!is.null(savepath)) save(mods, file=savepath)
+    
     # update on where we are in the iteration
     cat("\n ------------------------------------------------------------ \n finished sim study", i, 
         "\n ------------------------------------------------------------ \n ")    
@@ -756,7 +801,7 @@ bootstrapCI <- function(mod,
   }
   
   nullidx <- which(sapply(mods, length)==1)  
-  for(i in 1:length(nullidx)) mods[[nullidx[i]+1-i]] <- NULL
+  if(length(nullidx)>0) for(i in 1:length(nullidx)) mods[[nullidx[i]+1-i]] <- NULL
   
   m <- length(which(row.names(mod$hmm_results[[mod$winner]]$params) == "theta"))
   pars <- rbind(sapply(mods, function(x)x$hmm_results[[x$winner]]$params[row.names(x$hmm_results[[x$winner]]$params) %in% 'theta', 'Estimate']),
@@ -767,18 +812,62 @@ bootstrapCI <- function(mod,
   sapply(mods, function(x)x$ssm_results[[x$winner]]$params['psi', 'Estimate'])
   ) %>% as.data.frame() 
   
-  parstats <- pars %>% 
-    mutate(mean = rowMeans(.)) %>% 
-    mutate(median = apply(., 1, median)) %>% 
-    mutate(sd = apply(., 1, sd)) %>% 
-    mutate(lower2.5 = apply(., 1, quantile, probs=0.025)) %>% 
-    mutate(upper975 = apply(., 1, quantile, probs=0.975)) %>% 
-    mutate(par=c(rep("theta", m), rep("gamma", m), "sigma_lon", "sigma_lat", rep("A", m*m), "psi")) %>% 
-    select(par, mean, median, sd, lower2.5, upper975)
+  # parameters
+  true.pars <- c(theta, gamma, sdx, alpha, psi)
+  par.stats <- pars %>% 
+    mutate(mean = rowMeans(.),
+           median = apply(., 1, median), 
+           sd = apply(., 1, sd),
+           lower2.5 = apply(., 1, quantile, probs=0.025),
+           upper97.5 = apply(., 1, quantile, probs=0.975),
+           meanbias = (rowMeans(.)-true.pars),
+           rmse = sqrt(rowMeans((. - matrix(rep(true.pars, length(mods)), ncol=length(mods)))^2)),
+           par=c(rep("theta", m), rep("gamma", m), "sigma_lon", "sigma_lat", rep("A", m*m), "psi")) %>% 
+    select(par, mean, median, sd, lower2.5, upper97.5, meanbias, rmse)
   
-  #calculate the behavioural state error rate and the std. dev. of the xhat
+  # behavioural states
+  err.rate = colMeans((sapply(mods, function(x)x$preds$bhat) - sapply(sims, function(x)x$b))^2) #only accurate for two states
+  b.stats <- sapply(mods, function(x)x$preds$bhat) %>% as.data.frame %>%
+    mutate(mean=rowMeans(.),
+           mode=apply(., 1, function(x)unique(x)[which.max(table(x))]),
+           err.rate= rowMeans((.-sapply(sims, function(x)x$b))^2)) %>% 
+    select(mean, mode, err.rate) 
+
+  #location states
+  lon.rmse = sqrt(colMeans((sapply(mods, function(x)x$preds$lon) - sapply(sims, function(x)x$X[,1]))^2)) 
+  x.stats.lon <- sapply(mods, function(x)x$preds$lon) %>% as.data.frame %>% 
+    mutate(mean=rowMeans(.),
+           median = apply(., 1, median), 
+           sd=apply(., 1, sd),
+           lower2.5 = apply(., 1, quantile, probs=0.025),
+           upper97.5 = apply(., 1, quantile, probs=0.975),
+           meanbias = (rowMeans(. - sapply(sims, function(x)x$X[,1]))),
+           rmse = sqrt(rowMeans((. - sapply(sims, function(x)x$X[,1]))^2))) %>% 
+    select(mean, median, sd, lower2.5, upper97.5, meanbias, rmse)
+  lat.rmse = sqrt(colMeans((sapply(mods, function(x)x$preds$lat) - sapply(sims, function(x)x$X[,2]))^2)) 
+  x.stats.lat <- sapply(mods, function(x)x$preds$lat) %>% as.data.frame %>% 
+    mutate(mean=rowMeans(.),
+           median = apply(., 1, median), 
+           sd=apply(., 1, sd),
+           lower2.5 = apply(., 1, quantile, probs=0.025),
+           upper97.5 = apply(., 1, quantile, probs=0.975),
+           meanbias = (rowMeans(. - sapply(sims, function(x)x$X[,2]))),
+           rmse = sqrt(rowMeans((. - sapply(sims, function(x)x$X[,2]))^2))) %>% 
+    select(mean, sd, lower2.5, upper97.5, meanbias, rmse)
+
+  # also add a method for viewing
   
-  return(list(sims=sims, mods=mods, pars=pars, parstats=parstats))
+  return(list(sims=sims, 
+              mods=mods,
+              true.pars=true.pars,
+              pars=pars, 
+              par.stats=par.stats, 
+              err.rate=err.rate, 
+              b.stats=b.stats,
+              lon.rmse=lon.rmse,
+              x.stats.lon=x.stats.lon,
+              lat.rmse=lat.rmse,
+              x.stats.lat=x.stats.lat))
   
 }
 

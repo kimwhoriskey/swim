@@ -5,8 +5,8 @@
 \title{Simulate Correlated Random Walk Data}
 \usage{
 genTrack(
-  n_x = 500,
-  n_y = 1500,
+  nx = 500,
+  ny = 1500,
   date1 = Sys.time(),
   ts = 3,
   start_seed = 42,
@@ -14,13 +14,18 @@ genTrack(
   alpha = matrix(c(0.95, 0.05, 0.05, 0.95), nrow = 2, ncol = 2),
   me = "t",
   acprob = NULL,
-  psi = rep(0.3, 2)
+  psi = rep(0.3, 2),
+  res = NULL,
+  lc = NULL,
+  jidx = NULL,
+  trackid = NULL,
+  obsdates = NULL
 )
 }
 \arguments{
-\item{n_x}{Number of simulated true locations.}
+\item{nx}{Number of simulated true locations.}
 
-\item{n_y}{Number of simulated observatioons, n_y does not necessarily = n_x.}
+\item{ny}{Number of simulated observatioons, ny does not necessarily = nx.}
 
 \item{date1}{Starting date.}
 
