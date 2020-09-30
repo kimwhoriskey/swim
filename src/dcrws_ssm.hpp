@@ -82,9 +82,15 @@ Type dcrwSSM(objective_function<Type> * obj) {
   matrix<Type> sys_inverse = system.inverse();
   vector<Type> delta = sys_inverse*ones;
 
-  PARAMETER(working_psi); //working value for measurement error
-  Type psi = exp(working_psi);
-  ADREPORT(psi);
+  // PARAMETER(working_psi); //working value for measurement error
+  // Type psi = exp(working_psi);
+  // ADREPORT(psi);
+  //
+  // PARAMETER_VECTOR(working_gps_err); // working value for gps measurement error
+  // vector<Type> gps_err = exp(working_gps_err);
+  // matrix<Type> gpsSigma(2,2);
+  // gpsSigma << gps_err(0)*gps_err(0), 0.0,
+  // 0.0, gps_err(1)*gps_err(1);
 
 
 
@@ -119,9 +125,14 @@ Type dcrwSSM(objective_function<Type> * obj) {
   Type tmpm = 0.0;
   vector<Type> meas(ntracks);
   for(int i=0; i < ntracks; ++i){
-    tmpm = measurement(tracks[i].y, tracks[i].x, tracks[i].idx, tracks[i].jidx, tracks[i].ae, psi);
+    int measdatatype=tracks[i].datatype(0);
+    tmpm = measurement(obj, tracks[i].y, tracks[i].x, tracks[i].kind, tracks[i].idx, tracks[i].jidx, tracks[i].ae, measdatatype);
     meas(i) = tmpm;
   }
+  // for(int i=0; i < ntracks; ++i){
+  //   tmpm = measurement(tracks[i].y, tracks[i].x, tracks[i].idx, tracks[i].jidx, tracks[i].ae, psi);
+  //   meas(i) = tmpm;
+  // }
   REPORT(meas);
   nll += meas.sum();
 

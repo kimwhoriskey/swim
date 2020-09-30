@@ -3,6 +3,7 @@
 #include "extramacros.hpp"
 #include "trackstruct.hpp"
 #include "likelihoods.hpp"
+#include "measlikelihood.hpp"
 #include "dcrws_hmm.hpp"
 #include "dcrws_ssm.hpp"
 
