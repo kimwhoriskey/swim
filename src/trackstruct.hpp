@@ -9,7 +9,7 @@ struct track {
   array<Type> y;
   vector<int> b;
   vector<int> kind;
-  vector<int> datatype;
+  // vector<int> datatype;
   vector<int> idx;
   vector<Type> jidx;
   matrix<Type> ae;
@@ -30,7 +30,7 @@ track<Type>::track(std::string name, objective_function<Type> *obj) { // objecti
   y = tmbutils::asArray<Type>(getListElement(tracking_data, "y"));
   b = asVector<int>(getListElement(tracking_data, "b"));
   kind = asVector<int>(getListElement(tracking_data, "kind"));
-  datatype = asVector<int>(getListElement(tracking_data, "datatype")) ;
+  // datatype = asVector<int>(getListElement(tracking_data, "datatype")) ;
   idx = asVector<int>(getListElement(tracking_data, "idx"));
   jidx = asVector<Type>(getListElement(tracking_data, "jidx"));
   ae = asMatrix<Type>(getListElement(tracking_data, "ae"));

@@ -5,13 +5,17 @@
 #include "likelihoods.hpp"
 #include "measlikelihood.hpp"
 #include "dcrws_hmm.hpp"
-#include "dcrws_ssm.hpp"
+#include "dcrws_ssm_combo.hpp"
+#include "dcrws_ssm_argos.hpp"
+#include "dcrws_ssm_gps.hpp"
 
 
 // map the data_integer to a character
 enum model_choices {
   dcrwhmm = 0,
-  dcrwssm = 1,
+  dcrwssmargos = 1,
+  dcrwssmgps = 2,
+  dcrwssmcombo = 3,
 };
 
 template<class Type>
@@ -24,8 +28,14 @@ switch(model){
   case dcrwhmm:
     return dcrwHMM(this);
     break;
-  case dcrwssm:
-    return dcrwSSM(this);
+  case dcrwssmargos:
+    return dcrwSSMargos(this);
+    break;
+  case dcrwssmgps:
+    return dcrwSSMgps(this);
+    break;
+  case dcrwssmcombo:
+    return dcrwSSMcombo(this);
     break;
   }
 }
