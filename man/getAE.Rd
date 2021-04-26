@@ -4,7 +4,7 @@
 \alias{getAE}
 \title{get the Argos error terms for the measurement equation}
 \usage{
-getAE(ac)
+getAE(ac, gpsdof = 30, gpsdiv = 10)
 }
 \arguments{
 \item{ac}{vector of argos classes for the observations}

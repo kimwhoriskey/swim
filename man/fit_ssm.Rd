@@ -18,7 +18,8 @@ fit_ssm(
   inner_control = list(maxit = 1000),
   allowErr = FALSE,
   jiggle_err = 0.02,
-  silence = FALSE
+  silence = FALSE,
+  maxtime = 5 * 60
 )
 }
 \arguments{

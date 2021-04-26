@@ -13,13 +13,19 @@ genTrack(
   process_pars = list(theta = c(0, pi), gamma = c(0.8, 0.3), sdx = rep(0.1, 2)),
   alpha = matrix(c(0.95, 0.05, 0.05, 0.95), nrow = 2, ncol = 2),
   me = "t",
+  gpserr = NULL,
   acprob = NULL,
   psi = rep(0.3, 2),
   res = NULL,
   lc = NULL,
   jidx = NULL,
-  trackid = NULL,
-  obsdates = NULL
+  trackidx = NULL,
+  trackidy = NULL,
+  obsdates = NULL,
+  firstlocs = NULL,
+  jumpsd = c(1, 1),
+  startloc = matrix(c(0, 0), nrow = 1),
+  scaleobs = 1
 )
 }
 \arguments{

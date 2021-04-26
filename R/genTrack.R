@@ -14,16 +14,47 @@
 #' @param acprob Vector of relative proportions for drawing the numbers of observed locations from each Argos class   
 #' @return Simulated data set.
 genTrack <- function(nx=500, ny=1500, 
-                     date1=Sys.time(), ts=3, start_seed=42,
+                     date1=Sys.time(),
+                     ts=3, 
+                     start_seed=42,
                      process_pars = list(theta = c(0, pi),
                                          gamma = c(0.8,0.3),
                                          sdx = rep(0.1, 2)), 
                      alpha = matrix(c(0.95, 0.05, 0.05, 0.95), nrow=2, ncol=2),
-                     me='t', acprob=NULL, psi = rep(0.3, 2),
-                     res=NULL, lc=NULL, jidx=NULL, trackid=NULL, obsdates=NULL){
+                     me='t', 
+                     gpserr=NULL, 
+                     acprob=NULL, 
+                     psi = rep(0.3, 2),
+                     res=NULL, 
+                     lc=NULL, 
+                     jidx=NULL, 
+                     trackidx=NULL,
+                     trackidy=NULL, 
+                     obsdates=NULL,
+                     firstlocs=NULL,
+                     jumpsd=c(1,1),
+                     startloc=matrix(c(0,0), nrow=1), 
+                     scaleobs=1){
   
   set.seed(start_seed)
   
+  if(is.null(trackidx)){
+    tracknames="track1"
+    trackidx <- rep("track1", nx)
+  } else {
+    tracknames <- unique(trackidx)
+  }
+  if(length(tracknames)==1){
+    trackstartidx <- c(1, nx+1)
+  } else {
+    trackstartidx <- c(1, head(cumsum(rle(as.character(trackidx))$lengths),-1)+1, length(trackidx)+1)
+  }
+
+  # tmp <- numeric()
+  # for(i in 1:length(mod$idxs)) tmp <- append(tmp, mod$idxs[[i]]$nx)
+  # tmp2 <- numeric()
+  # for(i in 1:length(mod$idxs)) tmp2 <- append(tmp2, max(mod$idxs[[i]]$idx))
+
   
   ##########################
   ######  behaviours  ######
@@ -33,8 +64,12 @@ genTrack <- function(nx=500, ny=1500,
     m=nrow(alpha)
     B <-  1:m
     b <- numeric(nx)
-    b[1] <- sample(B, size=1, prob=rep(1/m, m))
-    for(i in 2:nx) b[i] = sample(B, size=1, prob=alpha[b[i-1],])
+    for(i in 1:(length(trackstartidx)-1)){
+      b[trackstartidx[i]] <- sample(B, size=1, prob=rep(1/m, m))
+      for(j in (trackstartidx[i]+1):(trackstartidx[i+1]-1)) b[j] = sample(B, size=1, prob=alpha[b[j-1],])
+    }
+    # b[1] <- sample(B, size=1, prob=rep(1/m, m))
+    # for(i in 2:nx) b[i] = sample(B, size=1, prob=alpha[b[i-1],])
   } else {
     b = res$b
   }
@@ -47,14 +82,32 @@ genTrack <- function(nx=500, ny=1500,
   
   if(is.null(res$x)){
     X <- matrix(nrow=nx, ncol=2)
-    X[1,] <- rep(0,2)
-    X[2,] = mvtnorm::rmvnorm(1, X[1,], diag(process_pars$sdx, nrow=2)) 
-    for(i in 3:nx){
+    if(is.null(firstlocs)){
+      X[1,] <- rep(0,2) + mvtnorm::rmvnorm(1, rep(0,2), diag(process_pars$sdx^2, nrow=2)) 
+      X[2,] <- mvtnorm::rmvnorm(1, X[1,], diag(process_pars$sdx^2, nrow=2)) 
+    } else {
+      X[1:2,] <- firstlocs
+    }
+    # X[1,] <- rep(0,2) + mvtnorm::rmvnorm(1, rep(0,2), diag(process_pars$sdx, nrow=2)) 
+    # X[2,] = mvtnorm::rmvnorm(1, X[1,], diag(process_pars$sdx, nrow=2)) 
+    for(i in 3:(trackstartidx[2]-1)){
       Tr <- matrix(c(cos(process_pars$theta[b[i]]), -sin(process_pars$theta[b[i]]),
                      sin(process_pars$theta[b[i]]), cos(process_pars$theta[b[i]])), 
                    nrow=2, byrow=TRUE)
-      X[i,] <- mvtnorm::rmvnorm(1, X[i-1,] + process_pars$gamma[b[i]] * Tr %*% (X[i-1,] - X[i-2,]), diag(process_pars$sdx)) 
+      X[i,] <- mvtnorm::rmvnorm(1, X[i-1,] + process_pars$gamma[b[i]] * Tr %*% (X[i-1,] - X[i-2,]), diag(process_pars$sdx^2)) 
     } 
+    if(length(trackstartidx)>2){
+      for(j in 2:(length(trackstartidx)-1)){
+        X[trackstartidx[j],] <- X[trackstartidx[j]-1,] + mvtnorm::rmvnorm(1, rep(0,2), diag(jumpsd, nrow=2)) 
+        X[trackstartidx[j]+1,] <- mvtnorm::rmvnorm(1, X[trackstartidx[j],], diag(process_pars$sdx^2, nrow=2)) 
+        for(i in (trackstartidx[j]+2):(trackstartidx[j+1]-1)){
+          Tr <- matrix(c(cos(process_pars$theta[b[i]]), -sin(process_pars$theta[b[i]]),
+                         sin(process_pars$theta[b[i]]), cos(process_pars$theta[b[i]])), 
+                       nrow=2, byrow=TRUE)
+          X[i,] <- mvtnorm::rmvnorm(1, X[i-1,] + process_pars$gamma[b[i]] * Tr %*% (X[i-1,] - X[i-2,]), diag(process_pars$sdx^2)) 
+        }
+      }
+    }
   } else {
     X <- res$x
   }
@@ -80,41 +133,57 @@ genTrack <- function(nx=500, ny=1500,
   }
 
   
+  if(length(tracknames)==1){
+    trackstartjidx <- c(1, ny+1)
+  } else {
+    trackstartjidx <- c(1, head(cumsum(rle(as.character(trackidy))$lengths),-1)+1, length(trackidy)+1)
+  }
   
   Y <- matrix(nrow=ny, ncol=2)
   if(me == 'gau'){
-    for(i in 1:ny){
-      y <- (1 - jidx[i,2]) * X[jidx[i,1],] + jidx[i,2] * X[jidx[i,1]+1,]
-      Y[i,] = y  + mvtnorm::rmvnorm(1, rep(0,2), diag(psi^2, nrow=2))
+    for(j in 1:(length(trackstartidx)-1)){
+      for(i in trackstartjidx[j]:(trackstartjidx[j+1]-1)){
+        y <- (1 - jidx[i,2]) * X[trackstartidx[j]+jidx[i,1]-1,] + jidx[i,2] * X[trackstartidx[j]+jidx[i,1],]
+        Y[i,] = y  + mvtnorm::rmvnorm(1, rep(0,2), diag(psi^2, nrow=2))
+      }
     }
   } else if(me == 't'){
-      all_classes <- c("Z", "B", "A", "0", "1", "2", "3")
+      all_classes <- c("Z", "B", "A", "0", "1", "2", "3", "GPS")
       if(is.null(lc)){
         lc <- sample(all_classes, ny, replace=TRUE, prob=acprob)
       } else {
         lc <- lc
       }
 
-      #from marie's code
-      ############# parameter values for the argos classes
-      # Make Z class = B class
-      sigmalon <- (c(4.2050261, 4.2050261, 0.507292, 2.1625936, 0.9020423, 0.3119293, 0.289866)/6366.71 * 180)/pi
-      sigmalat <- (c(3.041276, 3.041276, 0.5105468, 1.607056, 0.4603374, 0.2605126, 0.1220553)/6366.71 * 180)/pi
-      # If nu < 2 bsam sets it to 2
-      nulon <- c(2, 2, 2, 2, 2.298819, 2, 3.070609)
-      nulat <- c(2, 2, 2, 2, 3.896554, 6.314726, 2.075642)
-      
-      argos_error <- cbind(sigmalon, nulon, sigmalat, nulat)
-      row.names(argos_error) <- all_classes
-      data_error <- as.data.frame(argos_error[lc,])
+      data_error <- as.data.frame(getAE(lc))
 
-      for(i in 1:ny){
-        y <- (1 - jidx[i,2]) * X[jidx[i,1],] + jidx[i,2] * X[jidx[i,1]+1,]
-        Y[i,1] <- y[1] + rt(1, data_error$nulon[i])*data_error$sigmalon[i]/psi    # longitude
-        Y[i,2] <- y[2] + rt(1, data_error$nulat[i])*data_error$sigmalat[i]/psi    # latitude
+      if(is.null(gpserr)){
+        for(j in 1:(length(trackstartidx)-1)){
+          for(i in trackstartjidx[j]:(trackstartjidx[j+1]-1)){
+            xhat <- (1 - jidx[i,2]) * X[trackstartidx[j]+jidx[i,1]-1,] + jidx[i,2] * X[trackstartidx[j]+jidx[i,1],]
+            Y[i,1] <- xhat[1] + rt(1, data_error$nulon[i])*data_error$sigmalon[i]/sqrt(psi)    # longitude
+            Y[i,2] <- xhat[2] + rt(1, data_error$nulat[i])*data_error$sigmalat[i]/sqrt(psi)    # latitude
+          }   
+        }
+      } else {
+        for(j in 1:(length(trackstartidx)-1)){
+          for(i in trackstartjidx[j]:(trackstartjidx[j+1]-1)){
+            xhat <- (1 - jidx[i,2]) * X[trackstartidx[j]+jidx[i,1]-1,] + jidx[i,2] * X[trackstartidx[j]+jidx[i,1],]
+            if(lc[i]=='GPS'){
+              Y[i,1] <- xhat[1] + rnorm(1, 0, gpserr[1])    # longitude
+              Y[i,2] <- xhat[2] + rnorm(1, 0, gpserr[2])    # latitude
+            } else {
+              Y[i,1] <- xhat[1] + rt(1, data_error$nulon[i])*data_error$sigmalon[i]/sqrt(psi)    # longitude
+              Y[i,2] <- xhat[2] + rt(1, data_error$nulat[i])*data_error$sigmalat[i]/sqrt(psi)    # latitude
+            }
+          }          
+        }
       }
+ 
   }
 
+  X <- X*scaleobs + startloc[rep(1, nrow(X)),]
+  Y <- Y*scaleobs + startloc[rep(1, nrow(Y)),]
 
   # get the simulated dates
   # check the indexing on this
@@ -127,15 +196,19 @@ genTrack <- function(nx=500, ny=1500,
   }
 
   obs <- data.frame(date=date_y, lon=Y[,1], lat=Y[,2])
-  if(is.null(trackid)){
+  if(is.null(trackidy)){
     obs$trackid = 'track1'
   } else {
-    obs$trackid = trackid
+    obs$trackid = trackidy
   }
   if(me=='t') obs$lc = lc
+  obs <- obs %>% mutate(kind=case_when(lc=="GPS"~"GPS", T~"Argos")) %>% 
+    mutate(kindnum=case_when(kind=="GPS"~0, T~1))
   
-  rslt <- list(b=b, X=X, Y=Y, jidx=jidx,
+
+  rslt <- list(b=b, X=X, trackidx=trackidx, Y=Y, jidx=jidx,
                  date_x=date_x, date_y=date_y, obs=obs)
+  class(rslt) <- 'swimsim'
   return(rslt)
   
 }

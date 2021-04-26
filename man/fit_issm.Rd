@@ -8,16 +8,20 @@ fit_issm(
   obs,
   ts,
   p_start_hmm,
+  update_pstarthmm = FALSE,
   init_psi,
   res = "x",
   maxsteps = 10,
   fixsteps = FALSE,
   allowfc = FALSE,
   jiggle_fc = 0.01,
-  ssm_map = NULL,
+  max_fc = 3,
   allsilent = TRUE,
   scaleobs = 1,
-  ...
+  gpsdof = 10,
+  gpsdiv = 10,
+  ssm_args = NULL,
+  ssm_map = NULL
 )
 }
 \arguments{
@@ -39,11 +43,11 @@ fit_issm(
 
 \item{jiggle_fc}{how much random noise to add to the starting values of the parameters if the ssm falsely covnerges}
 
-\item{ssm_map}{mapping list for the ssm step}
-
 \item{allsilent}{if true, don't print the tmb tape for the hmm or ssm}
 
 \item{scaleobs}{value to scale the observations by (literally just divided), helpful for convergence if they are in eastings/northings (set to 1000 to put track in km)}
+
+\item{ssm_map}{mapping list for the ssm step}
 
 \item{...}{further arguments to fit_ssm}
 }

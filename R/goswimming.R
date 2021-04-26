@@ -53,7 +53,7 @@ winsorize <- function(obs, inflate=1){
   }
   
   # remove any outliers where the observed speed is less than 1.5xIQR
-  # because that would pull the observed locations AWAY from the true i believe
+  # because that would pull the observed locations AWAY from the true 
   outidx <- outidx[as.numeric(upperlim[obs[outidx,]$lc]) < sp[outidx]]
 
   # throw a warning if the starting value of a track segment might be an outlier
@@ -215,7 +215,8 @@ fit_ssm <- function(dat,
                     inner_optim_method = "newton", inner_control = list(maxit=1000), 
                     allowErr=FALSE, 
                     jiggle_err=0.02,  
-                    silence=FALSE){
+                    silence=FALSE, 
+                    maxtime=5*60){
   
   #extract the names of the fixed variables
   fixed_names <- names(mapping)
@@ -235,7 +236,6 @@ fit_ssm <- function(dat,
     if(err_num>10) stop("encountered errors > 10 times while attempting to fit the SSM") #cut optimization if errors > 10
     
     if(err_num>0){
-      err_num = err_num+1 #count the errors
       # print a message letting us know we're working on errors
       cat("\n -------------------- \n working on errors \n err: ", err$message, " \n -------------------- \n")
       
@@ -253,17 +253,21 @@ fit_ssm <- function(dat,
                      inner.control = inner_control, silent=silence)
     
     # use trycatch loop again
-    if(include_TMB_gr){
+    # optimizer="optim"
+    # optimizer_arguments=list(control=list(reltol=1e-4))
+     if(include_TMB_gr){
       argus <- append(list(obj$par, obj$fn, obj$gr), optimizer_arguments)
     } else {
       argus <- append(list(obj$par, obj$fn), optimizer_arguments)
     }
-
+ 
     err <- tryCatch({
-      opt <- do.call(optimizer, argus) # optimize TMB object
+      opt <- R.utils::withTimeout({do.call(optimizer, argus)}, timeout=maxtime, onTimeout="error") # optimize TMB object
       srep <- summary(sdreport(obj)) # extract parameter estimates
     },  error=function(e){e} #capture errors
     )
+    
+    err_num = err_num+1 #count the errors
     
   } # close while loop
   
@@ -281,8 +285,13 @@ fit_ssm <- function(dat,
     for(i in 1:length(tracknames)) xhat[[tracknames[i]]] <- obj$report()[[tracknames[i]]]$x
   }
     
-
-  rslt <- list(mess = opt$mess, obj=obj, opt=opt, nll=nll, 
+  if(optimizer=='optim' & opt$convergence==0){
+    mess <- "converged"
+  } else {
+    mess <- opt$mess
+  }
+  
+  rslt <- list(mess = mess, obj=obj, opt=opt, nll=nll, 
                params=params_ssm, xhat=xhat)
   class(rslt) <- "swimssm"
   return(rslt)
@@ -300,7 +309,7 @@ fit_ssm <- function(dat,
 #' @param prev_hmm the previous hmm
 #' @param prev_ssm the previous ssm 
 #' @param curr_model what's next? an hmm or ssm
-get_parms <- function(prev_hmm, prev_ssm, curr_model){
+get_parms <- function(prev_hmm, prev_ssm, curr_model, ssm_type, init_psi){
   
   p <- list(working_theta = as.numeric(prev_hmm$params[row.names(prev_hmm$params) %in% 'working_theta', 'Estimate']), #have to check that these are the right thetas
             working_gamma = as.numeric(prev_hmm$params[row.names(prev_hmm$params) %in% 'working_gamma','Estimate']),
@@ -314,15 +323,29 @@ get_parms <- function(prev_hmm, prev_ssm, curr_model){
     p$working_sigma_lon <- prev_hmm$params['working_tau_lon', 'Estimate']
     p$working_sigma_lat <- prev_hmm$params['working_tau_lat', 'Estimate']
     
-    if(!is.null(prev_ssm)){
-      
-      # measurement error
-      p$working_psi <- as.numeric(prev_ssm$params[row.names(prev_ssm$params) %in% 'working_psi', 'Estimate'])
-      # add in the locations
-      p$x = matrix(log(1), nrow=2, ncol=length(prev_hmm$b_hat)) 
-      # start at 0 regardless, but we can change this if we want
-
+    if(ssm_type==1){
+      p$working_psi <- log(init_psi)
+    } else if (ssm_type == 2){
+      p$working_gps_err <- c(log(1), log(1))
+    } else if(ssm_type==3){
+      p$working_psi <- log(init_psi)
+      p$working_gps_err <- c(log(1), log(1))
     }
+    
+    tracknames <- names(prev_hmm$bhat)
+    for(i in 1:length(tracknames)){
+      p[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=length(prev_hmm$bhat[[tracknames[i]]]))
+    }
+    
+    # if(!is.null(prev_ssm)){
+    #   
+    #   # measurement error
+    #   p$working_psi <- as.numeric(prev_ssm$params[row.names(prev_ssm$params) %in% 'working_psi', 'Estimate'])
+    #   # add in the locations
+    #   p$x = matrix(log(1), nrow=2, ncol=length(prev_hmm$b_hat)) 
+    #   # start at 0 regardless, but we can change this if we want
+    # 
+    # }
     
   } 
     
@@ -353,13 +376,18 @@ get_parms <- function(prev_hmm, prev_ssm, curr_model){
 fit_issm <- function(obs, 
                      ts, 
                      p_start_hmm,
+                     update_pstarthmm = FALSE,
                      init_psi,
                      res="x",
                      maxsteps=10, fixsteps=FALSE, 
-                     allowfc=FALSE, jiggle_fc=0.01, 
-                     ssm_map=NULL,
+                     allowfc=FALSE, jiggle_fc=0.01, max_fc=3,
                      allsilent=TRUE,
-                     scaleobs=1, ...){
+                     scaleobs=1,
+                     gpsdof=10, 
+                     gpsdiv=10, 
+                     ssm_args=NULL,
+                     ssm_map=NULL
+                     ){
 
 
   # obs=sim$obs
@@ -404,14 +432,20 @@ fit_issm <- function(obs,
   #                 working_sigma_lon=factor(NA), working_sigma_lat=factor(NA))
   # 
   
+  fullargs <- match.call()
   
   #convert from sf
-  if("sf" %in% class(obs)){
+  if(inherits(obs, 'sf')){
+    isprojected=TRUE
     obs <- obs %>% bind_cols(as_tibble(st_coordinates(obs))) %>% rename(lon=X, lat=Y) %>% as.data.frame() 
+    firstloc <- obs[1, c("lon", "lat")]
+  } else {
+    isprojected=FALSE
+    firstloc <- data.frame(lon=0, lat=0)
   }
-  obs[,c("lon", "lat")] <- obs[,c("lon", "lat")]/scaleobs
+  obs[,c("lon", "lat")] <- (obs[,c("lon", "lat")] - firstloc[rep(1, nrow(obs)),])/scaleobs
+  # obs[,c("lon", "lat")] <- obs[,c("lon", "lat")]/scaleobs
 
-  
   # set up accumulators
   # all of the results from each step
   hmm_results <- list()
@@ -431,12 +465,23 @@ fit_issm <- function(obs,
   ############ initial step, get intial location estimates ############
   #####################################################################
   
-  splitobs <- split(obs, obs$trackid)
+  obs$trackid <- factor(obs$trackid, levels=unique(obs$trackid))
+  splitobs <- split(obs, obs$trackid, )
   tracknames <- names(splitobs)
   
-  idxs <- lapply(splitobs, getJidx, ts = ts)
-  ae <- lapply(splitobs, function(x){as.matrix(getAE(x$lc))})
+  kind <- split(obs$kindnum, obs$trackid)
+  if(length(unique(obs$kind))==1 & "Argos" %in% unique(obs$kind)){
+    ssm_type <- 1
+  } else if (length(unique(obs$kind))==1 & "GPS" %in% unique(obs$kind)){
+    ssm_type <- 2
+  } else {
+    ssm_type <- 3 # combo
+  }
   
+  
+  idxs <- lapply(splitobs, getJidx, ts = ts)
+  ae <- lapply(splitobs, function(x){as.matrix(getAE(x$lc, gpsdof=gpsdof, gpsdiv=gpsdiv))})
+
   regobsdat <- lapply(splitobs, function(x)regTrack(x, ts=ts))
   regobs <- lapply(regobsdat, function(x)t(x$regx))
   
@@ -469,13 +514,14 @@ fit_issm <- function(obs,
   ##############################################################################
   
   # put together the data list for the model
-  ssm_dat <- list(model=1,
+  ssm_dat <- list(model=ssm_type,
                   tracknames=as.list(tracknames))
   for(i in 1:length(tracknames)){
     ssm_dat[[tracknames[i]]] <- list(y = t(array(c(splitobs[[tracknames[i]]]$lon, 
                                                    splitobs[[tracknames[i]]]$lat), 
                                                  dim=c(nrow(splitobs[[tracknames[i]]]), 2))),
                                      b = hmm_results[[1]]$bhat[[tracknames[i]]]-1, 
+                                     kind = kind[[tracknames[i]]],
                                      idx = idxs[[tracknames[i]]]$idx, 
                                      jidx = idxs[[tracknames[i]]]$jidx, 
                                      ae = ae[[tracknames[i]]])
@@ -486,11 +532,14 @@ fit_issm <- function(obs,
   # now get the parameters             
   p_start_ssm <- get_parms(prev_hmm = hmm_results[[1]], 
                            prev_ssm = NULL,
-                           curr_model = "ssm")
-  p_start_ssm$working_psi <- log(init_psi)
-  for(i in 1:length(tracknames)){
-    p_start_ssm[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[i]]]))
-  }
+                           curr_model = "ssm", 
+                           ssm_type = ssm_type, 
+                           init_psi = init_psi)
+ 
+  
+  # for(i in 1:length(tracknames)){
+  #   p_start_ssm[[paste(tracknames[i], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[i]]]))
+  # }
   
   # fit the ssm
   # block for false convergence
@@ -516,22 +565,34 @@ fit_issm <- function(obs,
  
     
     # fit SSM
-    ssm_time[[1]] <- system.time(ssm_results[[1]] <- fit_ssm(ssm_dat, 
-                                                             p_start = p_start_ssm,
-                                                             res=res,
-                                                             mapping = ssm_map,
-                                                             inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                             silence=allsilent))#,
-                                                             #...))
+    ssmargs <- ssm_args
+    ssmargs$dat = ssm_dat
+    ssmargs$p_start = p_start_ssm
+    ssmargs$res=res
+    ssmargs$silence=allsilent
+    ssmargs$mapping = ssm_map
+    ssm_time[[1]] <- system.time(
+      ssm_results[[1]] <- do.call(fit_ssm, 
+                                  ssmargs)
+      )
+    # ssm_time[[1]] <- system.time(ssm_results[[1]] <- fit_ssm(dat = ssm_dat, 
+    #                                                          p_start = p_start_ssm,
+    #                                                          res=res,
+    #                                                          # mapping = ssm_map,
+    #                                                          # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+    #                                                          # optimizer="optim", optimizer_arguments=list(control=list(reltol=1e-4)),
+    #                                                          silence=allsilent,
+    #                                                          # maxtime=1))#,
+    #                                                          # ...))
       # save the nll 
       nll_ssm[[1]] = ssm_results[[1]]$nll
       # save the new convergence, cue on this
       ssm_conv[[1]] <- ssm_results[[1]]$opt$convergence
   
     if(ssm_conv[[1]]>0) fc_count[1] = fc_count[1] + 1 # add to the count every time we come back up to the beginning of this loop
-    if(fc_count[1]>=10) warning("had false convergence 10 times while trying to get the SSM to fit")
+    if(fc_count[1]>=max_fc) warning(paste("had false convergence", max_fc, "times while trying to get the SSM to fit"))
     # stop if greater than 10 times
-    if(ssm_conv[[1]]==0 | allowfc==TRUE | fc_count[1]>=10) runme=FALSE
+    if(ssm_conv[[1]]==0 | allowfc==TRUE | fc_count[1]>=max_fc) runme=FALSE
   } # close while loop
 
   
@@ -562,10 +623,13 @@ fit_issm <- function(obs,
     # hmm_dat <- list(model=0, x=t(ssm_results[[i-1]]$xhat))
   
     # fit HMM again
-    p_start_hmm <- get_parms(prev_hmm = hmm_results[[i-1]], 
-                             prev_ssm = ssm_results[[i-1]],
-                             curr_model = "hmm")
-    
+    # update starting values of p_start_hmm if we want to
+    if(update_pstarthmm){
+      p_start_hmm <- get_parms(prev_hmm = hmm_results[[i-1]], 
+                               prev_ssm = ssm_results[[i-1]],
+                               curr_model = "hmm")
+    }
+
     hmm_time[[i]] <- system.time(hmm_results[[i]] <- fit_hmm(dat=hmm_dat,
                                                              p_start = p_start_hmm,
                                                              silence=allsilent))
@@ -585,11 +649,19 @@ fit_issm <- function(obs,
 
     # get starting parameters for the ssm
     # starting values come from the most recent HMM, except for psi which comes from the last ssm
+    # p_start_ssm <- get_parms(prev_hmm = hmm_results[[i]], 
+    #                          prev_ssm = ssm_results[[i-1]],
+    #                          curr_model = "ssm")
+    # p_start_ssm$working_psi <- log(init_psi)
+    # p_start_ssm$working_gps_err <- c(log(1), log(1))
+    # for(j in 1:length(tracknames)) p_start_ssm[[paste(tracknames[j], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[j]]]))
+    # 
+    
     p_start_ssm <- get_parms(prev_hmm = hmm_results[[i]], 
-                             prev_ssm = ssm_results[[i-1]],
-                             curr_model = "ssm")
-    p_start_ssm$working_psi <- log(init_psi)
-    for(j in 1:length(tracknames)) p_start_ssm[[paste(tracknames[j], ".x", sep="")]] = matrix(log(1), nrow=2, ncol=ncol(regobs[[tracknames[j]]]))
+                             prev_ssm = NULL,
+                             curr_model = "ssm", 
+                             ssm_type = ssm_type, 
+                             init_psi = init_psi)
     
     # block for false convergence, same deal as above
     fc_count[i]=0
@@ -606,14 +678,23 @@ fit_issm <- function(obs,
         }
       }
       
-      ssm_time[[i]] <- system.time(ssm_results[[i]] <- fit_ssm(ssm_dat, 
-                                                               p_start = p_start_ssm,
-                                                               res=res,
-                                                               mapping = ssm_map,
-                                                               inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
-                                                               silence=allsilent))#,
-                                                               #...))
-        # save the nll 
+      ssmargs$dat <- ssm_dat
+      ssmargs$p_start <- p_start_ssm
+      
+      ssm_time[[i]] <- system.time(
+        ssm_results[[i]] <- do.call(fit_ssm, 
+                                    ssmargs)
+      )
+      # ssm_time[[i]] <- system.time(ssm_results[[i]] <- fit_ssm(ssm_dat, 
+      #                                                          p_start = p_start_ssm,
+      #                                                          res=res,
+      #                                                          mapping = ssm_map,
+      #                                                          # inner_control = list(maxit=20000, step.tol=1e-4, grad.tol=1e-2),
+      #                                                          # optimizer="optim", optimizer_arguments=list(control=list(reltol=1e-4)),
+      #                                                          silence=allsilent,
+      #                                                          ...))
+      
+      # save the nll 
       nll_ssm[[i]] = ssm_results[[i]]$nll
       # save the new convergence, cue on this
       ssm_conv[[i]] <- ssm_results[[i]]$opt$convergence
@@ -623,11 +704,11 @@ fit_issm <- function(obs,
     
       
       if(ssm_conv[[i]]>0) fc_count[i] = fc_count[i] + 1
-      if(fc_count[i]>=10) warning("had false convergence >10 times while trying to get the SSM to fit")
+      if(fc_count[i]>=max_fc) warning(paste("had false convergence", max_fc, "times while trying to get the SSM to fit"))
       
       # condition to close
       
-      if(ssm_conv[[i]]==0 | allowfc==TRUE | fc_count[i]>=10) runme=FALSE
+      if(ssm_conv[[i]]==0 | allowfc==TRUE | fc_count[i]>=max_fc) runme=FALSE
       
     } # close fc while loop
 
@@ -655,7 +736,7 @@ fit_issm <- function(obs,
   nll_hmm <- sapply(hmm_results, function(x)x$nll)
   hmm_conv <- sapply(hmm_results, function(x)x$opt$convergence)
   hmm_mess <- sapply(hmm_results, function(x)x$opt$message)
-  ssm_mess <- sapply(ssm_results, function(x)x$opt$message)
+  ssm_mess <- sapply(ssm_results, function(x)x$mess)
   
   # put the results into a more convenient data frame
   ssm_nll <- data.frame(iter=1:length(ssm_results), mess = ssm_mess, conv = do.call(rbind, ssm_conv), nll = do.call(rbind, nll_ssm))
@@ -670,14 +751,15 @@ fit_issm <- function(obs,
   # new obs
   xhat <- data.frame(t(do.call(cbind, ssm_results[[winner]]$xhat)))
   names(xhat) <- c("lon", "lat")
-  preds <- data.frame(id = rep(tracknames, times=sapply(regobsdat, function(x)nrow(x$regx))),
+  preds <- data.frame(id = rep(as.character(tracknames), times=sapply(regobsdat, function(x)nrow(x$regx))),
                       date = do.call(c, lapply(regobsdat, function(x)x$xdates)),
-                      lon = t(do.call(cbind, ssm_results[[winner]]$xhat))[,1],
-                      lat = t(do.call(cbind, ssm_results[[winner]]$xhat))[,2],
+                      lon = t(do.call(cbind, ssm_results[[winner]]$xhat))[,1]*scaleobs+as.numeric(firstloc[1]),
+                      lat = t(do.call(cbind, ssm_results[[winner]]$xhat))[,2]*scaleobs+as.numeric(firstloc[2]),
                       bhat = do.call(c, hmm_results[[winner]]$bhat))
   
   # final results list
-  rslts <- list(obs=obs, idxs=idxs, scaleobs=scaleobs, maxsteps=maxsteps, ts=ts, 
+  rslts <- list(fullargs=fullargs, obs=obs, idxs=idxs, maxsteps=maxsteps, ts=ts, 
+                isprojected=isprojected, firstobs=firstloc, scaleobs=scaleobs,
                 hmm_results = hmm_results, ssm_results = ssm_results, 
                 hmm_time = hmm_time, ssm_time = ssm_time,
                 hmm_nll = hmm_nll, ssm_nll = ssm_nll, 
@@ -694,6 +776,13 @@ fit_issm <- function(obs,
 
 
 ####### bootstrap the errors
+
+#' Use a parametric bootstrap to calculate the standard errors of a model fit
+#' @export
+#' @param mod The model (issm object) to bootstrap errors for
+#' @param startseed The starting seed to keep track of the random generation
+#' @param nsamples The number of samples to take for the bootstrap
+#' @param savepath The path to save the results in (full path, including .rda ext)
 bootstrapCI <- function(mod, 
                         startseed=42, 
                         nsamples=50, 
@@ -702,7 +791,9 @@ bootstrapCI <- function(mod,
                         setREs=FALSE,
                         setjidx=TRUE,
                         setlc=TRUE,
-                        ...){
+                        usefirstlocs=FALSE,
+                        issm_args=list(),
+                        jumpsd=c(0.05, 0.05)){
   
   # get everything from the mod
   nx <- nrow(mod$preds)
@@ -713,6 +804,11 @@ bootstrapCI <- function(mod,
   sdx <- mod$hmm_results[[mod$winner]]$params[c('tau_lon', 'tau_lat'), 'Estimate']
   alpha <- mod$hmm_results[[mod$winner]]$params[row.names(mod$hmm_results[[mod$winner]]$params) %in% 'A', 'Estimate']
   psi <- mod$ssm_results[[mod$winner]]$params['psi', 'Estimate']
+  if("working_gps_err" %in% row.names(mod$ssm_results[[mod$winner]]$params)){
+    gpserr = exp(mod$ssm_results[[mod$winner]]$params[row.names(mod$ssm_results[[mod$winner]]$params) %in% 'working_gps_err', 'Estimate'])
+  } else {
+    gpserr = NULL
+  }
   
   if(setREs){
     res <- list(b=mod$preds$b,
@@ -724,16 +820,26 @@ bootstrapCI <- function(mod,
   
   if(setjidx){
     tracknames <- unique(mod$obs$trackid)
-    trackstartidx <- cumsum(table(mod$obs$trackid))
-    jidx <- data.frame(idx=mod$idxs[[tracknames[1]]]$idx, ji=mod$idxs[[tracknames[1]]]$jidx)
-    for(i in 2:length(tracknames)){
-      jidx <- rbind(jidx,data.frame(idx=jidx[trackstartidx[i-1], 1] + mod$idxs[[tracknames[i]]]$idx, ji=mod$idxs[[tracknames[i]]]$jidx))
+    # trackstartidx <- c(1, head(cumsum(rle(as.character(mod$obs$trackid))$lengths),-1)+1)
+    # jidx <- data.frame(idx=mod$idxs[[tracknames[1]]]$idx, ji=mod$idxs[[tracknames[1]]]$jidx)
+    # if(length(tracknames)>1){
+    #   for(i in 2:length(tracknames)){
+    #     jidx <- rbind(jidx,data.frame(idx=jidx[trackstartidx[i-1], 1] + mod$idxs[[tracknames[i]]]$idx, ji=mod$idxs[[tracknames[i]]]$jidx))
+    #   }
+    # }
+    idxtmp <- list()
+    for(i in 1:length(mod$idxs)){
+      idxtmp[[i]] <- cbind(mod$idxs[[i]]$idx, mod$idxs[[i]]$jidx)
     }
-    trackid <- mod$obs$trackid
+    jidx <- data.frame(do.call(rbind, idxtmp))
+    names(jidx) <- c("idx", "ji")
+    trackidy <- mod$obs$trackid
+    trackidx <- mod$preds$id
     obsdates <- mod$obs$date
   } else {
     jidx <- NULL
-    trackid <- NULL
+    trackidy <- NULL
+    trackidx <- NULL
     obsdates <- NULL
   }
   
@@ -742,6 +848,14 @@ bootstrapCI <- function(mod,
   } else {
     lc <- NULL
   }
+  
+  if(usefirstlocs){
+    firstlocs = mod$preds[1:2,c("lon", "lat")]
+    firstlocs = as.matrix((firstlocs - firstlocs[c(1,1),])/1000000)
+  } else {
+    firstlocs = NULL
+  }
+  
   
   # initialize
   sims <- list()
@@ -761,19 +875,32 @@ bootstrapCI <- function(mod,
                           alpha=matrix(alpha, nrow=sqrt(length(alpha))),
                           me="t", 
                           psi=psi,
+                          gpserr=gpserr,
                           acprob=acprob,
                           res=res, 
                           jidx=jidx,
                           lc=lc,
-                          trackid=trackid,
-                          obsdates=obsdates
-                          )
+                          trackidy=trackidy,
+                          trackidx=trackidx,
+                          obsdates=obsdates,
+                          firstlocs=firstlocs,
+                          startloc=mod$firstobs,
+                          scaleobs=mod$scaleobs, 
+                          jumpsd=jumpsd)
 
-    
-    mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
-                                    ts = mod$ts,
-                                    maxsteps = nsteps,
-                                    ...)})
+
+    issmargs = issm_args
+    issmargs$obs = sims[[i]]$obs
+    issmargs$ts = mod$ts
+    issmargs$maxsteps = nsteps
+    mods[[i]] <- tryCatch({
+      do.call(fit_issm, issmargs)
+      },
+      error=function(e)e)
+    # mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
+    #                                 ts = mod$ts,
+    #                                 maxsteps = nsteps,
+    #                                 ...)})
     # mods[[i]] <- tryCatch({fit_issm(obs = sims[[i]]$obs,
     #                                 ts = mod$ts,
     #                                 maxsteps = nsteps,
@@ -792,11 +919,11 @@ bootstrapCI <- function(mod,
     #                                                 working_sigma_lon=factor(NA), working_sigma_lat=factor(NA)))})
     
     # save it
-    if(!is.null(savepath)) save(mods, file=savepath)
+    if(!is.null(savepath)) saveRDS(mods, file=paste(savepath, '_bootstrapmods.RDS', sep=''))
     
     # update on where we are in the iteration
-    cat("\n ------------------------------------------------------------ \n finished sim study", i, 
-        "\n ------------------------------------------------------------ \n ")    
+    cat("\n ------------------------------------------------------------ \n finished sim study", i,
+        "\n ------------------------------------------------------------ \n ")
     
   }
   
@@ -856,18 +983,22 @@ bootstrapCI <- function(mod,
     select(mean, sd, lower2.5, upper97.5, meanbias, rmse)
 
   # also add a method for viewing
+  boot <- list(sims=sims, 
+               mods=mods,
+               true.pars=true.pars,
+               pars=pars, 
+               par.stats=par.stats, 
+               err.rate=err.rate, 
+               b.stats=b.stats,
+               lon.rmse=lon.rmse,
+               x.stats.lon=x.stats.lon,
+               lat.rmse=lat.rmse,
+               x.stats.lat=x.stats.lat)
+  class(boot) <- 'swim_bootstrap'
+  if(!is.null(savepath)) saveRDS(boot, file=paste(savepath, '_bootstrap.RDS', sep=''))
   
-  return(list(sims=sims, 
-              mods=mods,
-              true.pars=true.pars,
-              pars=pars, 
-              par.stats=par.stats, 
-              err.rate=err.rate, 
-              b.stats=b.stats,
-              lon.rmse=lon.rmse,
-              x.stats.lon=x.stats.lon,
-              lat.rmse=lat.rmse,
-              x.stats.lat=x.stats.lat))
+  
+  return(boot)
   
 }
 

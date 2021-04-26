@@ -9,11 +9,23 @@
 #' @param the cutoff gap time in hours. Any gaps larger than this will force the track to be split. 
 splitTrack <- function(dat, cutoff=24){
   timediff <- diff(as.numeric(dat$date))
-  idx <- which(timediff > cutoff*3600)
+  idx <- which(timediff >= cutoff*3600)
   suffixes <- rep(seq(length(idx)+1), times=diff(c(0, idx, nrow(dat))))
   dat$trackid <- paste("track", suffixes, sep='')
   return(dat)
 }
+
+
+
+#find foraging bouts
+findBouts <- function(dat, numberofstatesinbout=5){
+  rles <- data.frame(state=rle(dat$bhat)$values, run=rle(dat$bhat)$lengths) %>% 
+    mutate(startidx=c(1,head(cumsum(run)+1, -1))) %>% 
+    mutate(bout=case_when((run>=numberofstatesinbout & state==2) ~"bout", T~"notbout"))
+  # idx <- which(rles$run>=3 & rles$state==2)
+  return(dat %>% mutate(bout = rep(rles$bout, times=rles$run)) %>% 
+           mutate(boutidx = paste(dat$id[1], dat$trackid[1], bout, rep(1:nrow(rles), times=rles$run), sep='')))
+  }
 
 
 
@@ -28,6 +40,7 @@ regTrack <- function(dat, ts){
   delta = ts*60*60 #time step in seconds
   t0 = dat$date[1] #first time step
   tT = dat$date[nrow(dat)] #the final date time
+  # dates = seq(t0, tT+delta, by=delta) #all the time values for interpolation
   dates = seq(t0, tT, by=delta) #all the time values for interpolation
   regx <- as.data.frame(cbind(lon=approx(dat$date, dat$lon, xout = dates)$y,
                               lat=approx(dat$date, dat$lat, xout = dates)$y))
@@ -52,8 +65,8 @@ getJidx <- function(dat, ts){
   delta = ts*60*60 #time step in seconds
   t0 = dat$date[1] #first time step
   tT = dat$date[nrow(dat)] #the final date time
-  # x_dates = seq(t0, tT+delta, by=delta) #all the time values for interpolation
-  x_dates = seq(t0, tT, by=delta) #all the time values for interpolation
+  x_dates = seq(t0, tT+delta, by=delta) #all the time values for interpolation
+  # x_dates = seq(t0, tT, by=delta) #all the time values for interpolation
   
   # interval of the y's in the xhats
   idx <- findInterval(dat$date, x_dates)
@@ -74,13 +87,13 @@ getJidx <- function(dat, ts){
 #' get the Argos error terms for the measurement equation
 #' @export
 #' @param ac vector of argos classes for the observations
-getAE <- function(ac){
+getAE <- function(ac, gpsdof=30, gpsdiv=10){
   
-  all_classes <- c("3", "2", "1", "0", "A", "B", "Z")
-  sigmalon <- (c(0.289866, 0.3119293, 0.9020423, 2.1625936, 0.507292, 4.2050261, 4.2050261)/6366.71 * 180)/pi#, 0.01)
-  sigmalat <- (c(0.1220553, 0.2605126, 0.4603374, 1.607056, 0.5105468, 3.041276, 3.041276)/6366.71 * 180)/pi#, 0.01)
-  nulon <- c(3.070609, 2, 2.298819, 2, 2, 2, 2)#, 100000) #actual df values estimated
-  nulat <- c(2.075642, 6.314726, 3.896554, 2, 2, 2, 2)#, 100000)
+  all_classes <- c("GPS", "3", "2", "1", "0", "A", "B", "Z")
+  sigmalon <- (c(0.289866/gpsdiv, 0.289866, 0.3119293, 0.9020423, 2.1625936, 0.507292, 4.2050261, 4.2050261)/6366.71 * 180)/pi#, 0.01)
+  sigmalat <- (c(0.1220553/gpsdiv, 0.1220553, 0.2605126, 0.4603374, 1.607056, 0.5105468, 3.041276, 3.041276)/6366.71 * 180)/pi#, 0.01)
+  nulon <- c(gpsdof, 3.070609, 2, 2.298819, 2, 2, 2, 2)#, 100000) #actual df values estimated
+  nulat <- c(gpsdof, 2.075642, 6.314726, 3.896554, 2, 2, 2, 2)#, 100000)
   argos_error <- cbind(sigmalon, nulon, sigmalat, nulat)
   row.names(argos_error) <- all_classes
   

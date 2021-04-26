@@ -4,7 +4,7 @@
 \alias{get_parms}
 \title{get the appropriate parameter values for each step, used in the issm model}
 \usage{
-get_parms(prev_hmm, prev_ssm, curr_model)
+get_parms(prev_hmm, prev_ssm, curr_model, ssm_type, init_psi)
 }
 \arguments{
 \item{prev_hmm}{the previous hmm}

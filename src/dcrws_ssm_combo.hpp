@@ -88,6 +88,7 @@ Type dcrwSSMcombo(objective_function<Type> * obj) {
 
   PARAMETER_VECTOR(working_gps_err); // working value for gps measurement error
   vector<Type> gps_err = exp(working_gps_err);
+  ADREPORT(gps_err);
   matrix<Type> gpsSigma(2,2);
   gpsSigma << gps_err(0)*gps_err(0), 0.0,
   0.0, gps_err(1)*gps_err(1);
