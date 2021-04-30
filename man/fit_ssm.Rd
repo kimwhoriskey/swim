@@ -4,23 +4,15 @@
 \alias{fit_ssm}
 \title{fit an ssm}
 \usage{
-fit_ssm(
-  dat,
-  p_start = list(working_theta = c(log(1), log(1)), working_gamma = c(log(1), log(1)),
-    working_tau_lon = 0, working_tau_lat = 0, working_psi = log(1), x = matrix(log(1),
-    nrow = 2, ncol = n), working_A = matrix(c(log(0.75/0.25), log(0.25/0.75)))),
-  res = "x",
+fit_ssm(dat, p_start = list(working_theta = c(log(1), log(1)), working_gamma =
+  c(log(1), log(1)), working_tau_lon = 0, working_tau_lat = 0, working_psi =
+  log(1), x = matrix(log(1), nrow = 2, ncol = n), working_A =
+  matrix(c(log(0.75/0.25), log(0.25/0.75)))), res = "x",
   mapping = list(working_A = c(factor(NA), factor(NA))),
-  optimizer = "nlminb",
-  optimizer_arguments = list(rel.tol = 1e-10, x.tol = 1.5e-08),
-  include_TMB_gr = TRUE,
-  inner_optim_method = "newton",
-  inner_control = list(maxit = 1000),
-  allowErr = FALSE,
-  jiggle_err = 0.02,
-  silence = FALSE,
-  maxtime = 5 * 60
-)
+  optimizer = "nlminb", optimizer_arguments = list(rel.tol = 1e-10, x.tol =
+  1.5e-08), include_TMB_gr = TRUE, inner_optim_method = "newton",
+  inner_control = list(maxit = 1000), allowErr = FALSE, jiggle_err = 0.02,
+  silence = FALSE, maxtime = 5 * 60)
 }
 \arguments{
 \item{dat}{list of data, model is the model integer (check cpp), y is the observations, b are the behavioural states, idx is the index linking the observations to the true locations, jidx is the proportion of time between x and y for the interpolation calculation}

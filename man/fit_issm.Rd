@@ -4,25 +4,10 @@
 \alias{fit_issm}
 \title{fit a switching ssm iteratively}
 \usage{
-fit_issm(
-  obs,
-  ts,
-  p_start_hmm,
-  update_pstarthmm = FALSE,
-  init_psi,
-  res = "x",
-  maxsteps = 10,
-  fixsteps = FALSE,
-  allowfc = FALSE,
-  jiggle_fc = 0.01,
-  max_fc = 3,
-  allsilent = TRUE,
-  scaleobs = 1,
-  gpsdof = 10,
-  gpsdiv = 10,
-  ssm_args = NULL,
-  ssm_map = NULL
-)
+fit_issm(obs, ts, p_start_hmm, update_pstarthmm = FALSE, init_psi,
+  res = "x", maxsteps = 10, fixsteps = FALSE, allowfc = FALSE,
+  jiggle_fc = 0.01, max_fc = 3, allsilent = TRUE, scaleobs = 1,
+  gpsdof = 10, gpsdiv = 10, ssm_args = NULL, ssm_map = NULL)
 }
 \arguments{
 \item{obs}{the data: id, date (posix), lon, lat, ac}

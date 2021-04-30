@@ -4,19 +4,9 @@
 \alias{bootstrapCI}
 \title{Use a parametric bootstrap to calculate the standard errors of a model fit}
 \usage{
-bootstrapCI(
-  mod,
-  startseed = 42,
-  nsamples = 50,
-  nsteps = 20,
-  savepath = NULL,
-  setREs = FALSE,
-  setjidx = TRUE,
-  setlc = TRUE,
-  usefirstlocs = FALSE,
-  issm_args = list(),
-  jumpsd = c(0.05, 0.05)
-)
+bootstrapCI(mod, startseed = 42, nsamples = 50, nsteps = 20,
+  savepath = NULL, setREs = FALSE, setjidx = TRUE, setlc = TRUE,
+  usefirstlocs = FALSE, issm_args = list(), jumpsd = c(0.05, 0.05))
 }
 \arguments{
 \item{mod}{The model (issm object) to bootstrap errors for}

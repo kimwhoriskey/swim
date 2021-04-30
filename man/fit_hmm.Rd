@@ -4,13 +4,10 @@
 \alias{fit_hmm}
 \title{fit an HMM}
 \usage{
-fit_hmm(
-  dat,
-  p_start = list(working_theta = c(log(1), log(1)), working_gamma = c(log(1), log(1)),
-    working_tau_lon = log(1), working_tau_lat = log(1), working_A =
-    matrix(c(log(0.75/0.25), log(0.25/0.75)), ncol = 1, nrow = 2)),
-  silence = FALSE
-)
+fit_hmm(dat, p_start = list(working_theta = c(log(1), log(1)), working_gamma =
+  c(log(1), log(1)), working_tau_lon = log(1), working_tau_lat = log(1),
+  working_A = matrix(c(log(0.75/0.25), log(0.25/0.75)), ncol = 1, nrow = 2)),
+  silence = FALSE)
 }
 \arguments{
 \item{dat}{Named list: model denotes the model to use in integer format (check c++), x are the data, two rows, first one lon, second one lat}

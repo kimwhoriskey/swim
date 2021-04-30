@@ -1,6 +1,6 @@
 Package: swim
 Title: Switching Movement Models
-Version: 0.2.5
+Version: 1.0.0
 Date: 2020-03-20
 Author: Kim Whoriskey with contributions from C. M. Albertsen
 Maintainer: Kim Whoriskey <kwhoriskey@dal.ca>
@@ -8,4 +8,4 @@ Description: Fit behavioral hidden Markov models to spatially continuous animal 
 Imports: ggplot2, mvtnorm, sf, TMB, wesanderson
 LinkingTo: TMB, RcppEigen
 License: GPL-2
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1
